@@ -52,6 +52,7 @@ for arg in CommandLine.arguments.dropFirst() {
     case "-h", "--help": usage()
     case "-v", "--version": mode = "version"
     case "--probe": mode = "probe"
+    case "--ai-subtitles": mode = "aisubs"
     case "--clear-voice-filter": mode = "cvfilter"   // dev: print the Clear Voice filter for <layout> <device channels>
     case _ where arg.hasPrefix("--"):
         let body = arg.dropFirst(2)
@@ -73,6 +74,41 @@ do {
     case "version":
         let api = mpv_client_api_version()
         print("vela \(version) (libmpv client API \(api >> 16).\(api & 0xffff))")
+
+    case "aisubs":
+        // vela --ai-subtitles movie.mkv [--to=hi] [--from=en] [--start=600] [--end=900] > movie.srt
+        guard let path = positional.first else { usage() }
+        guard #available(macOS 26.0, *) else { fputs("vela: AI subtitles need macOS 26 or newer\n", stderr); exit(1) }
+        let opt = Dictionary(mpvOptions.map { ($0.0, $0.1) }, uniquingKeysWith: { $1 })
+        let url = fileURL(path)
+        let probe = try Player(headless: true, options: [("pause", "yes"), ("ao", "null")])
+        try probe.command(["loadfile", url.path])
+        guard probe.wait(for: [MPV_EVENT_FILE_LOADED, MPV_EVENT_END_FILE]) == MPV_EVENT_FILE_LOADED else {
+            fputs("vela: could not open \(path)\n", stderr); exit(1)
+        }
+        let audio = Track.list(from: probe.node("track-list")).first { $0.kind == .audio && $0.selected }
+        let gen = AISubtitleGenerator()
+        var o = AISubtitleGenerator.Options(media: url)
+        o.audioTrack = audio?.id
+        o.channelLayout = probe.string("current-tracks/audio/demux-channels")
+        o.sourceLanguage = opt["from"] ?? audio?.lang
+        o.targetLanguage = opt["to"]
+        o.start = opt["start"].flatMap(Double.init) ?? 0
+        o.end = opt["end"].flatMap(Double.init)
+        let t0 = Date()
+        gen.onProgress = { cues, at in fputs("\r  \(cues.count) lines · up to \(formatTime(at, showHours: true))   ", stderr) }
+        let done = DispatchSemaphore(value: 0)
+        Task {
+            do {
+                let cues = try await gen.run(o)
+                print(SRT.text(cues))
+                fputs("\n  done: \(cues.count) lines in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s\n", stderr)
+            } catch {
+                fputs("\nvela: \(error)\n", stderr); exit(1)
+            }
+            done.signal()
+        }
+        done.wait()
 
     case "cvfilter":
         print(ClearVoice.filter(layout: positional.first ?? "5.1(side)", deviceChannels: Int(positional.dropFirst().first ?? "2") ?? 2))

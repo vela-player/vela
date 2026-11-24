@@ -19,6 +19,16 @@ Film mixes put dialogue in the center channel and effects everywhere else; a nor
 
 Works on any track: surround gets a dialogue-first remix, stereo gets a speech-band lift. vela remembers the setting.
 
+## AI subtitles (preview, command line, macOS 26+)
+
+No subtitles for a film? vela can write them on your Mac with Apple's on-device speech recognition (nothing is uploaded):
+
+```bash
+vela --ai-subtitles movie.mkv > movie.srt
+```
+
+On a 5.1 film clip it caught 81% of the words in the official subtitles, at about 128× real time (a 2.5-hour film in roughly a minute). `--to=<language>` for translation is included but not yet tested. In-player menus come next.
+
 ## Install
 
 ### Homebrew (recommended, no Gatekeeper prompts)

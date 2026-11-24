@@ -75,6 +75,11 @@ final class Player {
         return mpv_get_property(handle, name, MPV_FORMAT_INT64, &v) >= 0 ? v : nil
     }
 
+    /// Ask mpv to send MPV_EVENT_PROPERTY_CHANGE whenever `name` changes.
+    func observe(_ name: String, _ format: mpv_format) {
+        mpv_observe_property(handle, 0, name, format)
+    }
+
     // MARK: - Events
 
     /// GUI mode: mpv wakes us, we drain its queue on the main thread.

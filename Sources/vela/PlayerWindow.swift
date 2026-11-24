@@ -7,12 +7,12 @@ import CMpv
 
 /// The view that hosts the video layer, takes keys and accepts dropped files.
 final class VideoView: NSView {
-    let player: Player
     let videoLayer: VideoLayer
     var onOpen: ((URL) -> Void)?
+    var onKey: ((NSEvent) -> Bool)?
+    var onMouseMove: (() -> Void)?
 
     init(player: Player) {
-        self.player = player
         videoLayer = VideoLayer(player: player)
         super.init(frame: .zero)
         wantsLayer = true
@@ -30,20 +30,18 @@ final class VideoView: NSView {
         videoLayer.contentsScale = window?.backingScaleFactor ?? 2  // render at native Retina pixels
     }
 
-    // Minimal keys for Phase 2; the full keymap lands in Phase 3.
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func mouseMoved(with event: NSEvent) { onMouseMove?() }
+    override func mouseEntered(with event: NSEvent) { onMouseMove?() }
+
     override func keyDown(with event: NSEvent) {
-        switch event.keyCode {
-        case 49: player.run("cycle", "pause")                       // space
-        case 123: player.run("seek", "-5")                         // ←
-        case 124: player.run("seek", "5")                          // →
-        case 53: if window?.styleMask.contains(.fullScreen) == true { window?.toggleFullScreen(nil) } // esc
-        default:
-            switch event.charactersIgnoringModifiers?.lowercased() {
-            case "f": window?.toggleFullScreen(nil)
-            case "q": NSApp.terminate(nil)
-            default: super.keyDown(with: event)
-            }
-        }
+        if onKey?(event) != true { super.keyDown(with: event) }
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -73,7 +71,11 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     let player: Player
     let window: NSWindow
     let videoView: VideoView
+    private let overlay = OverlayView()
+    private var state = PlaybackState()
     private var sizedForCurrentFile = false
+    private var overlayVisible = true
+    private var hideTimer: Timer?
 
     init(player: Player) {
         self.player = player
@@ -87,12 +89,40 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         window.isMovableByWindowBackground = true
         window.backgroundColor = .black
         window.collectionBehavior = [.fullScreenPrimary]
-        window.contentView = videoView
         window.delegate = self
         window.title = "vela"
+        window.minSize = NSSize(width: 480, height: 270)
         window.center()
 
+        let container = NSView()
+        for v in [videoView, overlay] as [NSView] {
+            v.translatesAutoresizingMaskIntoConstraints = false
+            container.addSubview(v)
+            NSLayoutConstraint.activate([
+                v.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+                v.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+                v.topAnchor.constraint(equalTo: container.topAnchor),
+                v.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+            ])
+        }
+        window.contentView = container
+
         videoView.onOpen = { [weak self] url in self?.open(url) }
+        videoView.onKey = { [weak self] e in self?.handleKey(e) ?? false }
+        videoView.onMouseMove = { [weak self] in self?.poke() }
+        overlay.onTogglePause = { [weak self] in self?.player.run("cycle", "pause") }
+        overlay.onToggleMute = { [weak self] in self?.player.run("cycle", "mute") }
+        overlay.onVolume = { [weak self] v in self?.player.setProperty("volume", String(format: "%.0f", v)) }
+        overlay.seekBar.onSeek = { [weak self] t, done in
+            self?.player.run("seek", String(t), done ? "absolute+exact" : "absolute+keyframes")
+            self?.poke()
+        }
+
+        for (name, format) in [("time-pos", MPV_FORMAT_DOUBLE), ("duration", MPV_FORMAT_DOUBLE),
+                               ("demuxer-cache-time", MPV_FORMAT_DOUBLE), ("pause", MPV_FORMAT_FLAG),
+                               ("volume", MPV_FORMAT_DOUBLE), ("mute", MPV_FORMAT_FLAG)] {
+            player.observe(name, format)
+        }
         player.onEvent = { [weak self] ev in self?.handle(ev) }
         player.startEventPump()
     }
@@ -100,18 +130,25 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     func show() {
         window.makeKeyAndOrderFront(nil)
         window.makeFirstResponder(videoView)
+        poke()
     }
 
     func open(_ url: URL) {
         sizedForCurrentFile = false
         window.title = url.lastPathComponent
+        overlay.titleLabel.stringValue = url.deletingPathExtension().lastPathComponent
         window.representedURL = url
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
         player.run("loadfile", url.path)
+        poke()
     }
+
+    // MARK: - mpv events
 
     private func handle(_ ev: UnsafePointer<mpv_event>) {
         switch ev.pointee.event_id {
+        case MPV_EVENT_PROPERTY_CHANGE:
+            propertyChanged(ev.pointee.data.assumingMemoryBound(to: mpv_event_property.self).pointee)
         case MPV_EVENT_VIDEO_RECONFIG:
             if !sizedForCurrentFile { fitWindowToVideo() }
         case MPV_EVENT_FILE_LOADED:
@@ -122,6 +159,86 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
             break
         }
     }
+
+    private func propertyChanged(_ p: mpv_event_property) {
+        let name = String(cString: p.name)
+        let double = p.format == MPV_FORMAT_DOUBLE ? p.data.load(as: Double.self) : 0
+        let flag = p.format == MPV_FORMAT_FLAG ? p.data.load(as: Int32.self) != 0 : false
+        switch name {
+        case "time-pos":
+            // time-pos fires every frame; the controls only change once per second.
+            let secondChanged = Int(double) != Int(state.position)
+            state.position = double
+            if !secondChanged { return }
+        case "duration": state.duration = double
+        case "demuxer-cache-time": state.cachedUntil = double
+        case "pause": state.paused = flag; poke()
+        case "volume": state.volume = double
+        case "mute": state.muted = flag
+        default: return
+        }
+        if overlayVisible { overlay.update(state) }  // no UI work while hidden
+    }
+
+    // MARK: - Overlay auto-hide
+
+    /// Show the controls and restart the 2-second hide timer.
+    private func poke() {
+        setOverlay(visible: true)
+        hideTimer?.invalidate()
+        hideTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            if self.overlay.pointerInsideControls { self.poke() } else { self.setOverlay(visible: false) }
+        }
+    }
+
+    private func setOverlay(visible: Bool) {
+        if visible { overlay.update(state) }
+        guard visible != overlayVisible else { return }
+        overlayVisible = visible
+        let titlebar = window.standardWindowButton(.closeButton)?.superview
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = visible ? 0.12 : 0.35
+            overlay.animator().alphaValue = visible ? 1 : 0
+            titlebar?.animator().alphaValue = visible ? 1 : 0
+        }
+        if !visible { NSCursor.setHiddenUntilMouseMoves(true) }
+    }
+
+    // MARK: - Keys
+
+    /// Returns true when the key was handled. `osd-msg` makes mpv draw feedback on the video.
+    private func handleKey(_ e: NSEvent) -> Bool {
+        let shift = e.modifierFlags.contains(.shift)
+        let step = shift ? "60" : "5"
+        switch e.keyCode {
+        case 49: player.run("cycle", "pause")                                    // space
+        case 123: player.run("seek", "-" + step); poke()                         // ←
+        case 124: player.run("seek", step); poke()                               // →
+        case 126: player.run("osd-msg-bar", "add", "volume", "5")                // ↑
+        case 125: player.run("osd-msg-bar", "add", "volume", "-5")               // ↓
+        case 53:                                                                 // esc
+            if window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+        case 51: player.run("osd-msg", "set", "speed", "1")                      // backspace
+        default:
+            switch e.charactersIgnoringModifiers?.lowercased() {
+            case "f": window.toggleFullScreen(nil)
+            case "m": player.run("osd-msg", "cycle", "mute")
+            case "a": player.run("osd-msg", "cycle", "audio")
+            case "s": player.run("osd-msg", "cycle", "sub")
+            case "[": player.run("osd-msg", "multiply", "speed", "1/1.1")
+            case "]": player.run("osd-msg", "multiply", "speed", "1.1")
+            case "i": player.run("script-binding", "stats/display-stats-toggle")
+            case ".": player.run("frame-step")
+            case ",": player.run("frame-back-step")
+            case "q": NSApp.terminate(nil)
+            default: return false
+            }
+        }
+        return true
+    }
+
+    // MARK: - Window sizing
 
     /// Size the window to the video's display size, capped at 85% of the screen, aspect locked.
     private func fitWindowToVideo() {
@@ -147,10 +264,12 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     /// VELA_DEBUG=1: print playback health every 5 s (used for performance testing).
     private func startDebugStats() {
         Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            guard let p = self?.player else { return }
-            let keys = ["time-pos", "hwdec-current", "video-params/pixelformat", "estimated-vf-fps",
-                        "frame-drop-count", "decoder-frame-drop-count", "mistimed-frame-count",
-                        "cache-buffering-state", "demuxer-cache-duration", "audio-params/channel-count"]
+            guard let self else { return }
+            let p = self.player
+            fputs("visible=\(self.window.occlusionState.contains(.visible)) ", stderr)
+            let keys = ["time-pos", "hwdec-current", "estimated-vf-fps", "frame-drop-count",
+                        "decoder-frame-drop-count", "cache-buffering-state", "demuxer-cache-duration",
+                        "audio-params/channel-count"]
             fputs(keys.map { "\($0)=\(p.string($0) ?? "-")" }.joined(separator: " ") + "\n", stderr)
         }
     }

@@ -2,7 +2,7 @@
 
 Ultra-fast, ultra-light media player for macOS. Plays everything FFmpeg plays (MKV, MP4, MOV, AVI, WebM, TS, FLAC, MP3, ALAC, DSD, …) with hardware decoding, and handles 20–30 GB Blu-ray remuxes with TrueHD / DTS-HD audio smoothly.
 
-> **Status:** early development (Phase 2 of 6). Plays video in a native window with hardware decoding. On-screen controls land in Phase 3. See [SPEC.md](SPEC.md).
+> **Status:** early development (Phase 3 of 6). Native window, hardware decoding, auto-hiding controls and the full keymap. Track menus land in Phase 4. See [SPEC.md](SPEC.md).
 
 ## Install
 
@@ -35,7 +35,22 @@ vela --probe movie.mkv              # print codec, resolution, audio info
 vela --version
 ```
 
-Keys so far: `Space` pause, `←/→` seek 5 s, `F` or double-click fullscreen, `Esc` leave fullscreen, `Q` quit.
+### Keys
+
+| Key | Action |
+|---|---|
+| `Space` | Play / pause |
+| `←` `→` | Seek 5 s (`Shift`: 60 s) |
+| `↑` `↓` | Volume |
+| `M` | Mute |
+| `A` / `S` | Next audio / subtitle track |
+| `[` `]` / `Backspace` | Slower / faster / normal speed |
+| `,` `.` | Frame back / forward |
+| `F`, double-click | Fullscreen (`Esc` leaves) |
+| `I` | Stats overlay |
+| `Q` | Quit |
+
+Controls appear when you move the mouse and fade out after 2 s.
 
 ```bash
 VELA_DEBUG=1 vela movie.mkv         # print hwdec / dropped frames / cache every 5 s

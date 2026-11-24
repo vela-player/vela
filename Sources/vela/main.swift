@@ -76,6 +76,9 @@ do {
         print("vela \(version) (libmpv client API \(api >> 16).\(api & 0xffff))")
 
     case "aisubs":
+        #if !compiler(>=6.2)
+        fputs("vela: this build was made without AI subtitles (needs the macOS 26 SDK to compile)\n", stderr); exit(1)
+        #else
         // vela --ai-subtitles movie.mkv [--to=hi] [--from=en] [--start=600] [--end=900] > movie.srt
         guard let path = positional.first else { usage() }
         guard #available(macOS 26.0, *) else { fputs("vela: AI subtitles need macOS 26 or newer\n", stderr); exit(1) }
@@ -109,6 +112,7 @@ do {
             done.signal()
         }
         done.wait()
+        #endif
 
     case "cvfilter":
         print(ClearVoice.filter(layout: positional.first ?? "5.1(side)", deviceChannels: Int(positional.dropFirst().first ?? "2") ?? 2))

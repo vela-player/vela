@@ -9,6 +9,9 @@ import Foundation
 import Speech
 import Translation
 
+// The speech APIs ship with the macOS 26 SDK (Swift 6.2). Older toolchains build vela without them.
+#if compiler(>=6.2)
+
 /// One subtitle line, in seconds from the start of the media.
 struct Cue: Sendable {
     var start: Double
@@ -262,3 +265,5 @@ final class AISubtitleGenerator: @unchecked Sendable {
         Locale.current.localizedString(forLanguageCode: l.languageCode?.identifier ?? "") ?? l.minimalIdentifier
     }
 }
+
+#endif

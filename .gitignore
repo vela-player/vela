@@ -7,3 +7,4 @@
 *.pdf
 .code-review-graph/
 .graph-indexer/
+build/

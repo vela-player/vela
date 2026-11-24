@@ -6,7 +6,7 @@ import AppKit
 import CMpv
 import Foundation
 
-let version = "0.2.0"
+let version = "1.0.0"
 
 func usage() -> Never {
     print("""

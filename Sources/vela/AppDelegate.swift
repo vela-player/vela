@@ -15,23 +15,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.mpvOptions = mpvOptions
     }
 
-    func applicationDidFinishLaunching(_ note: Notification) {
+    private var openedFile = false
+
+    // The window exists before Finder hands over files (application(_:open:) can arrive first).
+    func applicationWillFinishLaunching(_ note: Notification) {
         do {
-            let c = PlayerWindowController(player: try Player(options: mpvOptions))
-            controller = c
+            controller = PlayerWindowController(player: try Player(options: mpvOptions))
             NSApp.mainMenu = makeMenu()
-            c.show()
-            NSApp.activate(ignoringOtherApps: true)
-            if let file = initialFile { c.open(file) } else { openDocument(nil) }
         } catch {
             fputs("vela: \(error)\n", stderr)
-            NSApp.terminate(nil)
+            exit(1)
         }
     }
 
-    /// Finder "Open With" / dock drops (once vela ships as a .app bundle).
+    func applicationDidFinishLaunching(_ note: Notification) {
+        guard let c = controller else { return }
+        c.show()
+        NSApp.activate(ignoringOtherApps: true)
+        if let file = initialFile {
+            open(file)
+        } else {
+            // Give a Finder "open file" a moment to arrive before asking.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                if self?.openedFile == false { self?.openDocument(nil) }
+            }
+        }
+    }
+
+    private func open(_ url: URL) {
+        openedFile = true
+        controller?.open(url)
+    }
+
+    /// Finder double-click / "Open With" / drops on the Dock icon (vela.app).
     func application(_ app: NSApplication, open urls: [URL]) {
-        if let url = urls.first { controller?.open(url) }
+        guard let url = urls.first else { return }
+        if subtitleExtensions.contains(url.pathExtension.lowercased()) { controller?.addSubtitle(url) } else { open(url) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
@@ -46,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.movie, .audio, .audiovisualContent]
         panel.allowsOtherFileTypes = true
-        if panel.runModal() == .OK, let url = panel.url { controller?.open(url) }
+        if panel.runModal() == .OK, let url = panel.url { open(url) }
     }
 
     private func makeMenu() -> NSMenu {

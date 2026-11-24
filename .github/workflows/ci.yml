@@ -1,0 +1,21 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]   # Apple Silicon and Intel
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mpv and ffmpeg
+        run: brew install mpv ffmpeg
+      - name: Build and smoke test
+        run: make test
+      - name: Bundle app
+        run: make app

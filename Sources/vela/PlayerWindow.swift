@@ -74,6 +74,8 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     let videoView: VideoView
     private let overlay = OverlayView()
     private let statsPanel = StatsPanel()
+    /// AISubtitleController on macOS 26+ (stored untyped so older macOS can load this class).
+    private var ai: AnyObject?
     private var statsTimer: Timer?
     private var state = PlaybackState()
     private var sizedForCurrentFile = false
@@ -152,6 +154,15 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         }
         player.onEvent = { [weak self] ev in self?.handle(ev) }
         player.startEventPump()
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *) {
+            ai = MainActor.assumeIsolated {
+                let c = AISubtitleController(player: player, window: window)
+                c.onChange = { [weak self] in self?.rebuildTrackMenus() }
+                return c
+            }
+        }
+        #endif
         rebuildTrackMenus()
     }
 
@@ -162,6 +173,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     }
 
     func open(_ url: URL) {
+        stopAI()
         saveResumePosition()
         fileLoaded = false
         audioLayout = .none
@@ -267,6 +279,12 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    func stopAI() {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), let c = ai as? AISubtitleController { MainActor.assumeIsolated { c.stop() } }
+        #endif
+    }
+
     // MARK: - Clear Voice
 
     private var clearVoiceOn = UserDefaults.standard.bool(forKey: "clearVoice")
@@ -312,6 +330,12 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         subtitleMenu.addItem(.separator())
         let add = subtitleMenu.addItem(withTitle: "Add Subtitle File…", action: #selector(chooseSubtitle), keyEquivalent: "")
         add.target = self
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), fileLoaded, let c = ai as? AISubtitleController {
+            let menu = subtitleMenu
+            MainActor.assumeIsolated { c.addMenuItems(to: menu) }
+        }
+        #endif
         overlay.setTrackButtons(audio: tracks.contains { $0.kind == .audio } ? tracks.filter { $0.kind == .audio }.count : 0,
                                 subtitles: tracks.filter { $0.kind == .sub }.count)
     }
@@ -361,6 +385,12 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     // MARK: - Resume, audio layout
 
     private func fileDidLoad() {
+        #if compiler(>=6.2)
+        if #available(macOS 26.0, *), let c = ai as? AISubtitleController, let url = window.representedURL {
+            MainActor.assumeIsolated { c.fileOpened(url) }
+        }
+        #endif
+        rebuildTrackMenus()
         let tracks = Track.list(from: player.node("track-list"))
         if !tracks.contains(where: { $0.kind == .video && !$0.albumArt }) {
             audioLayout = tracks.contains { $0.kind == .video } ? .art : .compact

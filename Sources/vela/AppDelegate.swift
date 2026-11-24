@@ -56,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
 
     func applicationWillTerminate(_ note: Notification) {
+        controller?.stopAI()
         controller?.saveResumePosition()
         controller?.videoView.videoLayer.shutdown()  // render context before the mpv core
         controller = nil

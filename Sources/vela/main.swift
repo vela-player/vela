@@ -16,6 +16,11 @@ func usage() -> Never {
            vela --probe <file>    print media info and exit
            vela --version
 
+    On-device AI (macOS 26+):
+           vela --ai-subtitles <file> [--to=hi]           write subtitles (SRT) to stdout
+           vela --ask <file|srt> --at=<sec> "question"     EXPERIMENTAL, can be wrong
+           vela --recap <file|srt> --at=<sec>              EXPERIMENTAL, can be wrong
+
     Any --key=value is passed to mpv, e.g. --start=3600 --mute=yes --volume=50
     Defaults can live in ~/.config/vela/config, one key=value per line.
     """)
@@ -53,6 +58,8 @@ for arg in CommandLine.arguments.dropFirst() {
     case "-v", "--version": mode = "version"
     case "--probe": mode = "probe"
     case "--ai-subtitles": mode = "aisubs"
+    case "--ask": mode = "ask"
+    case "--recap": mode = "recap"
     case "--clear-voice-filter": mode = "cvfilter"   // dev: print the Clear Voice filter for <layout> <device channels>
     case _ where arg.hasPrefix("--"):
         let body = arg.dropFirst(2)
@@ -108,6 +115,48 @@ do {
                 fputs("\n  done: \(cues.count) lines in \(String(format: "%.1f", Date().timeIntervalSince(t0))) s\n", stderr)
             } catch {
                 fputs("\nvela: \(error)\n", stderr); exit(1)
+            }
+            done.signal()
+        }
+        done.wait()
+        #endif
+
+    case "ask", "recap":
+        // vela --ask movie.mkv|subs.srt --at=3600 "who is the man in the coat?"
+        // vela --recap movie.mkv|subs.srt --at=3600
+        guard let path = positional.first else { usage() }
+        #if !compiler(>=6.2)
+        fputs("vela: this build was made without on-device AI (needs the macOS 26 SDK)\n", stderr); exit(1)
+        #else
+        guard #available(macOS 26.0, *) else { fputs("vela: needs macOS 26 or newer\n", stderr); exit(1) }
+        guard MovieMemory.isAvailable else { fputs("vela: turn on Apple Intelligence in System Settings first\n", stderr); exit(1) }
+        let opt = Dictionary(mpvOptions.map { ($0.0, $0.1) }, uniquingKeysWith: { $1 })
+        let at = opt["at"].flatMap(Double.init) ?? .infinity
+        let url = fileURL(path)
+        let done = DispatchSemaphore(value: 0)
+        Task {
+            do {
+                var cues: [Cue]
+                if url.pathExtension.lowercased() == "srt" {
+                    cues = SRT.parse(try String(contentsOf: url, encoding: .utf8))
+                } else {
+                    fputs("  listening to the dialogue…\n", stderr)
+                    cues = try await AISubtitleGenerator().run(AISubtitleGenerator.Options(media: url))
+                }
+                let memory = MovieMemory(cues: cues, cacheFile: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("vela-memory-\(Int(MovieMemory.sceneLength))s-\(url.path.utf8.reduce(UInt64(5381)) { ($0 &* 33) ^ UInt64($1) }).json"))
+                let t0 = Date()
+                if mode == "recap" {
+                    print(try await memory.recap(at: at))
+                } else {
+                    let q = positional.dropFirst().joined(separator: " ")
+                    let a = try await memory.ask(q, at: at)
+                    print(a.text)
+                    for e in a.evidence { print("   [\(MovieMemory.stamp(e.start))] \(e.text.replacingOccurrences(of: "\n", with: " "))") }
+                }
+                fputs(String(format: "  (%.1f s)\n", Date().timeIntervalSince(t0)), stderr)
+            } catch {
+                fputs("vela: \(MovieMemory.explain(error))\n", stderr); exit(1)
             }
             done.signal()
         }

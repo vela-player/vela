@@ -26,7 +26,7 @@ No subtitles for a film, or none in your language? **Subtitles → Generate Subt
 - Starts where you are watching and fills in progressively (lines appear within seconds), then goes back and does the beginning.
 - **Generate Translated Subtitles → Hindi / Spanish / …** translates as it goes. The first time, macOS asks to download that language.
 - Done once per film: the result is cached and offered as an "AI · English" track next time.
-- On a 5.1 film clip it caught 81% of the words in the official subtitles, at about 128× real time (a 2.5-hour film in roughly a minute).
+- Tested on a full 2 h 8 min film: transcribed in **51 seconds** (about 150× real time), matching **90%** of the words in the official subtitles.
 
 From the command line:
 
@@ -34,6 +34,17 @@ From the command line:
 vela --ai-subtitles movie.mkv > movie.srt
 vela --ai-subtitles --to=hi movie.mkv > movie.hi.srt
 ```
+
+## Ask the movie (experimental, command line)
+
+Ask about what you've watched so far, or get a "previously" recap, answered by Apple's on-device model (Apple Intelligence must be on). It only ever sees dialogue up to the time you give, so it can't spoil what comes next.
+
+```bash
+vela --ask movie.mkv --at=3480 "why are they called the Thunderbolts?"
+vela --recap movie.mkv --at=3600
+```
+
+**It's experimental because it isn't reliable yet.** On a full film it answered simple early questions correctly with the supporting line and never spoiled anything, but Apple's safety filter refused some action dialogue, it missed questions the dialogue did answer, and long recaps were vague. It isn't in the player's menus for that reason.
 
 ## Install
 

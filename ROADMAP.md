@@ -5,7 +5,7 @@ on-device transcript engine that shipped as `vela --ai-subtitles` in 1.0.
 
 | Release | Feature | Needs | Status |
 |---|---|---|---|
-| 1.1 | Ask the movie + Catch me up | macOS 26, Apple Intelligence on | Prototyped (findings below) |
+| 1.1 | Ask the movie + Catch me up | macOS 26, Apple Intelligence on | Experimental CLI (`--ask`, `--recap`); not reliable enough for the player |
 | 1.2 | Language-learning mode | macOS 26 (speech), Translation languages | Planned |
 | 2.0 | Live AI dubbing | macOS 26, Translation languages, system voices | Planned, prototype first |
 | 2.x | Find a scene by describing it | macOS 15+ (Vision) | Planned, prototype first |
@@ -30,6 +30,18 @@ already heard, so they can't spoil the rest.
   - Treats "not yet" as "no" (at 0:30, "Does Peter give up?" → "No" instead of "not revealed yet").
   - Uses its own world knowledge ("M.J. is Peter's girlfriend"), which can **spoil famous films**.
   - Subtitles have no speaker names, so "who said what" is guesswork.
+
+**Full-film test** (Thunderbolts, 2 h 8 min, AI transcript at 90% word accuracy):
+- Correct: "What company owns the research?" at 5:00 → Ox Group [3:28]; "Who is Bob?" at 5:00 → not revealed;
+  "Why are they called the Thunderbolts?" at 50:00 → not revealed (no spoilers in any test).
+- Failed: a question at 20:00 was refused by Apple's safety filter (even with
+  `permissiveContentTransformations`); the Thunderbolts question at 58:00 came back "not revealed" although
+  the dialogue explains it at 57:13; recaps were vague, and at 100 min invented names and repeated lines.
+- Conclusion: the small on-device model can't reliably reason over speaker-less dialogue. Kept as an
+  experimental command-line feature; revisit when Apple's model, speaker labels or context size improve.
+- Implementation notes: 2.5-minute scene summaries (cached), numbered lines cited by number, a second
+  check that copies the supporting words and verifies they appear in the cited lines, token budget
+  estimated at ~1.2 characters per token (`tokenCount(for:)` needs macOS 26.4).
 
 **Design.**
 - Context budget is ~4k tokens; a film is 15–25k words. So: rolling **scene summaries** every ~5 min,

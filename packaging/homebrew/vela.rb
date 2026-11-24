@@ -13,7 +13,7 @@ class Vela < Formula
 
   def install
     # Link against mpv's opt path so vela keeps working across mpv upgrades.
-    ENV["MPV_PREFIX"] = Formula["mpv"].opt_prefix
+    ENV["MPV_PREFIX"] = formula_opt_prefix("mpv")
     system "swift", "build", "--disable-sandbox", "-c", "release"
     bin.install ".build/release/vela"
   end

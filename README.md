@@ -2,17 +2,17 @@
 
 Ultra-fast, ultra-light media player for macOS. Plays everything FFmpeg plays (MKV, MP4, MOV, AVI, WebM, TS, FLAC, MP3, ALAC, DSD, …) with hardware decoding, and handles 20–30 GB Blu-ray remuxes with TrueHD / DTS-HD audio smoothly.
 
-> **Status:** early development (Phase 5 of 6). Feature-complete for v1: playback, controls, tracks, resume, mini player, audio mode and config. Packaging and Homebrew land in Phase 6. See [SPEC.md](SPEC.md).
+> **Status:** v1.0.0. See [SPEC.md](SPEC.md) for the design. See [SPEC.md](SPEC.md).
 
 ## Install
 
 ### Homebrew (recommended, no Gatekeeper prompts)
 
 ```bash
-brew install <github-user>/tap/vela
+brew install technitish9123/tap/vela
 ```
 
-This builds vela from source on your Mac, so macOS never blocks it. It is published once the repository goes public.
+Homebrew builds vela from source on your Mac (about a minute), so macOS never blocks it. Upgrade with `brew upgrade vela`.
 
 ### From source
 
@@ -20,10 +20,10 @@ Requires macOS 13+, the Xcode Command Line Tools (`xcode-select --install`) and 
 
 ```bash
 brew install mpv
-git clone https://github.com/<github-user>/vela.git
+git clone https://github.com/technitish9123/vela.git
 cd vela
-swift build -c release
-.build/release/vela --version
+make install          # installs to /usr/local/bin (PREFIX=... to change)
+make app              # optional: build/vela.app with Finder file associations
 ```
 
 ## Usage
@@ -84,3 +84,9 @@ VELA_DEBUG=1 vela movie.mkv         # print hwdec / dropped frames / cache every
 vela is free software: you can redistribute it and/or modify it under the terms of the **GNU General Public License v3.0 or later**. See [LICENSE](LICENSE).
 
 vela uses [libmpv](https://mpv.io) (GPLv2+) and [FFmpeg](https://ffmpeg.org) (LGPL/GPL), and their licenses apply to them.
+
+## Releasing
+
+1. Bump `version` in `Sources/vela/main.swift`, commit.
+2. `git tag v1.2.3 && git push --tags`.
+3. The Release workflow creates the GitHub release and updates `technitish9123/homebrew-tap` (needs the `TAP_GITHUB_TOKEN` secret).

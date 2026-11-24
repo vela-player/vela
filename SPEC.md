@@ -66,6 +66,8 @@ GPL-3.0-or-later (compatible with libmpv GPLv2+ and FFmpeg GPL builds). Every so
 3. **Cask / .app download** only after Apple notarization (Developer account, $99/year). Unsigned .app downloads aren't offered because macOS blocks them.
 4. Later: a trimmed static FFmpeg/libmpv build to drop the brew dependency and support older macOS.
 
+Universal (arm64 + x86_64) binaries need a universal libmpv, which Homebrew doesn't ship. The formula builds natively on each Mac, so it isn't needed until step 3.
+
 ## Phases
 1. Spec, SwiftPM scaffold, libmpv linked, headless playback smoke test
 2. Window, rendering, open file/CLI

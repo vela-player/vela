@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+*.xcodeproj
+.DS_Store
+
+# not part of the project
+*.pdf
+.code-review-graph/
+.graph-indexer/

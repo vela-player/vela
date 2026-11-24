@@ -4,6 +4,21 @@ Ultra-fast, ultra-light media player for macOS. Plays everything FFmpeg plays (M
 
 > **Status:** v1.0.0. See [SPEC.md](SPEC.md) for the design. See [SPEC.md](SPEC.md).
 
+## Clear Voice
+
+Quiet dialogue, deafening explosions? Press **`V`** (or the voice button in the control bar).
+
+Film mixes put dialogue in the center channel and effects everywhere else; a normal surround-to-stereo downmix buries the center, which is why laptop speakers and headphones make you ride the volume all film. Clear Voice remixes with the dialogue in front and evens out the jumps:
+
+| Measured on a 5.1 film (EBU R128) | Standard mix | Clear Voice |
+|---|---|---|
+| Dialogue vs effects | baseline | **+9.9 dB** louder relative to effects |
+| Action scene loudness range | 13.4 LU | **4.8 LU** (64% smaller swings) |
+| Quiet scene loudness | −35.0 LUFS | **−25.2 LUFS** (10 dB easier to hear) |
+| Clipping | peaks at −2.5 dBFS | limited to −1 dBFS |
+
+Works on any track: surround gets a dialogue-first remix, stereo gets a speech-band lift. vela remembers the setting.
+
 ## Install
 
 ### Homebrew (recommended, no Gatekeeper prompts)
@@ -50,6 +65,7 @@ vela --version
 | `F`, double-click | Fullscreen (`Esc` leaves) |
 | `T` | Float on top |
 | `P` | Mini player (small, corner, all Spaces) |
+| `V` | Clear Voice on/off |
 | `I` | Stats panel (codec, 10-bit/HDR, audio channels, output device, dropped frames, buffer) |
 | `Q` | Quit |
 

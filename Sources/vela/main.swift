@@ -52,6 +52,7 @@ for arg in CommandLine.arguments.dropFirst() {
     case "-h", "--help": usage()
     case "-v", "--version": mode = "version"
     case "--probe": mode = "probe"
+    case "--clear-voice-filter": mode = "cvfilter"   // dev: print the Clear Voice filter for <layout> <device channels>
     case _ where arg.hasPrefix("--"):
         let body = arg.dropFirst(2)
         if let eq = body.firstIndex(of: "=") {
@@ -72,6 +73,9 @@ do {
     case "version":
         let api = mpv_client_api_version()
         print("vela \(version) (libmpv client API \(api >> 16).\(api & 0xffff))")
+
+    case "cvfilter":
+        print(ClearVoice.filter(layout: positional.first ?? "5.1(side)", deviceChannels: Int(positional.dropFirst().first ?? "2") ?? 2))
 
     case "probe":
         guard let path = positional.first else { usage() }

@@ -135,6 +135,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         }
         overlay.onAudioMenu = { [weak self] view in self?.popUp(self?.audioMenu, from: view) }
         overlay.onSubtitleMenu = { [weak self] view in self?.popUp(self?.subtitleMenu, from: view) }
+        overlay.onClearVoice = { [weak self] in self?.toggleClearVoice() }
         videoView.onKey = { [weak self] e in self?.handleKey(e) ?? false }
         videoView.onMouseMove = { [weak self] in self?.poke() }
         overlay.onTogglePause = { [weak self] in self?.player.run("cycle", "pause") }
@@ -145,7 +146,8 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         for (name, format) in [("time-pos", MPV_FORMAT_DOUBLE), ("duration", MPV_FORMAT_DOUBLE),
                                ("demuxer-cache-time", MPV_FORMAT_DOUBLE), ("pause", MPV_FORMAT_FLAG),
                                ("volume", MPV_FORMAT_DOUBLE), ("mute", MPV_FORMAT_FLAG),
-                               ("track-list", MPV_FORMAT_NONE)] {
+                               ("track-list", MPV_FORMAT_NONE), ("audio-params/channels", MPV_FORMAT_NONE),
+                               ("audio-out-params/channel-count", MPV_FORMAT_NONE)] {
             player.observe(name, format)
         }
         player.onEvent = { [weak self] ev in self?.handle(ev) }
@@ -196,6 +198,12 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     private func propertyChanged(_ p: mpv_event_property) {
         let name = String(cString: p.name)
         if name == "track-list" { rebuildTrackMenus(); return }
+        if name == "audio-params/channels" { applyClearVoice(); return }
+        if name == "audio-out-params/channel-count" {
+            // Remember what the device takes, but not while our own downmix is shaping the output.
+            if !clearVoiceActive, let n = player.int(name), n > 0 { deviceChannels = Int(n) }
+            return
+        }
         let double = p.format == MPV_FORMAT_DOUBLE ? p.data.load(as: Double.self) : 0
         let flag = p.format == MPV_FORMAT_FLAG ? p.data.load(as: Int32.self) != 0 : false
         switch name {
@@ -259,12 +267,47 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    // MARK: - Clear Voice
+
+    private var clearVoiceOn = UserDefaults.standard.bool(forKey: "clearVoice")
+    private var clearVoiceActive = false   // filter currently in mpv's chain
+    private var clearVoiceLayout = ""      // the layout it was built for
+    private var deviceChannels = 2
+
+    @objc func toggleClearVoice() {
+        clearVoiceOn.toggle()
+        UserDefaults.standard.set(clearVoiceOn, forKey: "clearVoice")
+        applyClearVoice(force: true)
+        player.run("show-text", clearVoiceOn ? "Clear Voice on  ·  louder dialogue, tamer explosions" : "Clear Voice off", "2000")
+        rebuildTrackMenus()
+    }
+
+    /// (Re)build the filter for the current track's channel layout. Called on toggle and whenever
+    /// the audio format changes (new file, other audio track).
+    private func applyClearVoice(force: Bool = false) {
+        let layout = player.string("audio-params/channels") ?? ""
+        overlay.setClearVoice(on: clearVoiceOn, available: !layout.isEmpty)
+        let wanted = clearVoiceOn && !layout.isEmpty
+        if !force, wanted == clearVoiceActive, layout == clearVoiceLayout { return }
+        if clearVoiceActive { player.run("af", "remove", ClearVoice.label) }
+        clearVoiceActive = false
+        guard wanted else { return }
+        player.run("af", "add", ClearVoice.filter(layout: layout, deviceChannels: deviceChannels))
+        clearVoiceActive = true
+        clearVoiceLayout = layout
+    }
+
     // MARK: - Tracks
 
     /// Rebuild the Audio and Subtitles menus (menu bar and overlay buttons share them).
     private func rebuildTrackMenus() {
         let tracks = Track.list(from: player.node("track-list"))
         fill(audioMenu, with: tracks.filter { $0.kind == .audio }, property: "aid")
+        audioMenu.addItem(.separator())
+        let cv = audioMenu.addItem(withTitle: "Clear Voice", action: #selector(toggleClearVoice), keyEquivalent: "")
+        cv.target = self
+        cv.state = clearVoiceOn ? .on : .off
+        cv.toolTip = "Louder dialogue, tamer explosions (V)"
         fill(subtitleMenu, with: tracks.filter { $0.kind == .sub }, property: "sid")
         subtitleMenu.addItem(.separator())
         let add = subtitleMenu.addItem(withTitle: "Add Subtitle File…", action: #selector(chooseSubtitle), keyEquivalent: "")
@@ -448,6 +491,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
             case ".": player.run("frame-step")
             case ",": player.run("frame-back-step")
             case "t": toggleFloatOnTop()
+            case "v": toggleClearVoice()
             case "p": toggleMiniPlayer()
             case "q": NSApp.terminate(nil)
             default: return false
@@ -506,7 +550,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
             fputs("visible=\(self.window.occlusionState.contains(.visible)) ", stderr)
             let keys = ["time-pos", "hwdec-current", "estimated-vf-fps", "frame-drop-count",
                         "decoder-frame-drop-count", "cache-buffering-state", "demuxer-cache-duration",
-                        "audio-params/channel-count", "volume", "mute", "current-tracks/audio/lang"]
+                        "audio-params/channel-count", "volume", "mute", "current-tracks/audio/lang", "af"]
             fputs(keys.map { "\($0)=\(p.string($0) ?? "-")" }.joined(separator: " ") + "\n", stderr)
             if ProcessInfo.processInfo.environment["VELA_DEBUG"] == "stats" {
                 for (title, rows) in p.statsSections(window: self.window) {
@@ -521,6 +565,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     @objc func validateMenuItem(_ item: NSMenuItem) -> Bool {
         if item.action == #selector(toggleFloatOnTop) { item.state = floatsOnTop ? .on : .off }
         if item.action == #selector(toggleMiniPlayer) { item.state = isMiniPlayer ? .on : .off }
+        if item.action == #selector(toggleClearVoice) { item.state = clearVoiceOn ? .on : .off }
         return true
     }
 

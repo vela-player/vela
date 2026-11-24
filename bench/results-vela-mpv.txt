@@ -1,0 +1,27 @@
+./bench.sh: line 41: c0: unbound variable
+./bench.sh: line 42: c0: unbound variable
+vela run=1 window_s=0.034 cpu_total=% (app=%) footprint=346 MB
+./bench.sh: line 41: c0: unbound variable
+./bench.sh: line 42: c0: unbound variable
+vela run=2 window_s=0.234 cpu_total=% (app=%) footprint=357 MB
+./bench.sh: line 41: c0: unbound variable
+./bench.sh: line 42: c0: unbound variable
+vela run=3 window_s=0.237 cpu_total=% (app=%) footprint=376 MB
+./bench.sh: line 41: c0: unbound variable
+./bench.sh: line 42: c0: unbound variable
+mpv-default run=1 window_s=0.039 cpu_total=% (app=%) footprint=341 MB
+./bench.sh: line 41: c0: unbound variable
+./bench.sh: line 42: c0: unbound variable
+mpv-default run=2 window_s=0.044 cpu_total=% (app=%) footprint=330 MB
+./bench.sh: line 41: c0: unbound variable
+./bench.sh: line 42: c0: unbound variable
+mpv-default run=3 window_s=0.045 cpu_total=% (app=%) footprint=401 MB
+./bench.sh: line 41: c0: unbound variable
+./bench.sh: line 42: c0: unbound variable
+mpv-hwdec run=1 window_s=0.039 cpu_total=% (app=%) footprint=222 MB
+./bench.sh: line 41: c0: unbound variable
+./bench.sh: line 42: c0: unbound variable
+mpv-hwdec run=2 window_s=0.041 cpu_total=% (app=%) footprint=208 MB
+./bench.sh: line 41: c0: unbound variable
+./bench.sh: line 42: c0: unbound variable
+mpv-hwdec run=3 window_s=0.044 cpu_total=% (app=%) footprint=328 MB

@@ -130,6 +130,8 @@ final class OverlayView: NSView {
     var onVolume: (Double) -> Void = { _ in }
     var onAudioMenu: (NSView) -> Void = { _ in }
     var onSubtitleMenu: (NSView) -> Void = { _ in }
+    var onClearVoice: () -> Void = {}
+    private let voiceButton = NSButton()
 
     /// True while the pointer is over the control bar; the overlay stays visible then.
     private(set) var pointerInsideControls = false
@@ -178,6 +180,10 @@ final class OverlayView: NSView {
         subtitleButton.target = self
         subtitleButton.action = #selector(subtitleClicked)
         subtitleButton.toolTip = "Subtitles"
+        Self.symbolButton(voiceButton, "person.wave.2")
+        voiceButton.target = self
+        voiceButton.action = #selector(voiceClicked)
+        voiceButton.toolTip = "Clear Voice (V): louder dialogue, tamer explosions"
 
         volumeSlider.controlSize = .small
         volumeSlider.target = self
@@ -188,7 +194,7 @@ final class OverlayView: NSView {
         seekBar.onHover = { [weak self] h in self?.showHover(h) }
         remaining.alignment = .right
 
-        let row = NSStackView(views: [playButton, elapsed, seekBar, remaining, audioButton, subtitleButton, muteButton, volumeSlider])
+        let row = NSStackView(views: [playButton, elapsed, seekBar, remaining, voiceButton, audioButton, subtitleButton, muteButton, volumeSlider])
         row.orientation = .horizontal
         row.spacing = 10
         row.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 14)
@@ -281,6 +287,14 @@ final class OverlayView: NSView {
 
     @objc private func audioClicked() { onAudioMenu(audioButton) }
     @objc private func subtitleClicked() { onSubtitleMenu(subtitleButton) }
+    @objc private func voiceClicked() { onClearVoice() }
+
+    /// Filled, accent-colored icon while Clear Voice is on.
+    func setClearVoice(on: Bool, available: Bool) {
+        voiceButton.isHidden = !available
+        voiceButton.image = NSImage(systemSymbolName: on ? "person.wave.2.fill" : "person.wave.2", accessibilityDescription: "Clear Voice")
+        voiceButton.contentTintColor = on ? .controlAccentColor : .white
+    }
     @objc private func playClicked() { onTogglePause() }
     @objc private func muteClicked() { onToggleMute() }
     @objc private func volumeChanged() { onVolume(volumeSlider.doubleValue) }

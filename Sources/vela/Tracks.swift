@@ -20,6 +20,7 @@ struct Track {
     let forced: Bool
     let external: Bool
     let hearingImpaired: Bool
+    let albumArt: Bool
 
     init?(_ map: [String: Any]) {
         guard let id = map["id"] as? Int64, let kind = Kind(rawValue: map["type"] as? String ?? "") else { return nil }
@@ -35,6 +36,7 @@ struct Track {
         forced = map["forced"] as? Bool ?? false
         external = map["external"] as? Bool ?? false
         hearingImpaired = map["hearing-impaired"] as? Bool ?? false
+        albumArt = map["albumart"] as? Bool ?? false
     }
 
     static func list(from node: Any?) -> [Track] {

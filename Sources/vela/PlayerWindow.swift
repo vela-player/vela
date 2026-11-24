@@ -78,6 +78,15 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     private var overlayVisible = true
     private var hideTimer: Timer?
     private var debugTimer: Timer?
+    private var fileLoaded = false
+
+    /// Audio files get a compact window. `.art` shows the cover; `.compact` is just the controls.
+    private enum AudioLayout { case none, art, compact }
+    private var audioLayout = AudioLayout.none
+
+    private(set) var floatsOnTop = false
+    private var miniPlayerFrame: NSRect?  // window frame to restore when leaving the mini player
+    var isMiniPlayer: Bool { miniPlayerFrame != nil }
     let audioMenu = NSMenu(title: "Audio")
     let subtitleMenu = NSMenu(title: "Subtitles")
 
@@ -144,6 +153,9 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     }
 
     func open(_ url: URL) {
+        saveResumePosition()
+        fileLoaded = false
+        audioLayout = .none
         sizedForCurrentFile = false
         window.title = url.lastPathComponent
         overlay.titleLabel.stringValue = url.deletingPathExtension().lastPathComponent
@@ -160,8 +172,10 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         case MPV_EVENT_PROPERTY_CHANGE:
             propertyChanged(ev.pointee.data.assumingMemoryBound(to: mpv_event_property.self).pointee)
         case MPV_EVENT_VIDEO_RECONFIG:
-            if !sizedForCurrentFile { fitWindowToVideo() }
+            if !sizedForCurrentFile, !isMiniPlayer { fitWindowToVideo() }
         case MPV_EVENT_FILE_LOADED:
+            fileLoaded = true
+            fileDidLoad()
             if ProcessInfo.processInfo.environment["VELA_DEBUG"] != nil, debugTimer == nil { startDebugStats() }
         case MPV_EVENT_SHUTDOWN:
             NSApp.terminate(nil)
@@ -247,6 +261,83 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         poke()
     }
 
+    // MARK: - Resume, audio layout
+
+    private func fileDidLoad() {
+        let tracks = Track.list(from: player.node("track-list"))
+        if !tracks.contains(where: { $0.kind == .video && !$0.albumArt }) {
+            audioLayout = tracks.contains { $0.kind == .video } ? .art : .compact
+            let title = player.string("media-title") ?? window.title
+            let artist = player.string("metadata/by-key/Artist")
+            overlay.titleLabel.stringValue = [artist, title].compactMap { $0 }.joined(separator: " — ")
+            layOutForAudio()
+        } else {
+            window.minSize = NSSize(width: 480, height: 270)
+        }
+        if let pos = player.double("time-pos"), pos > 30 {
+            let hours = (player.double("duration") ?? 0) >= 3600
+            player.run("show-text", "Resumed at \(formatTime(pos, showHours: hours))   ·   Home to start over", "3000")
+        }
+    }
+
+    /// Remember the position unless the file is basically unwatched or finished.
+    func saveResumePosition() {
+        guard fileLoaded, state.duration > 0 else { return }
+        if state.position > 30 && state.position < state.duration - 60 {
+            player.run("write-watch-later-config")
+        } else {
+            player.run("delete-watch-later-config")
+        }
+    }
+
+    private func layOutForAudio() {
+        guard !window.styleMask.contains(.fullScreen), !isMiniPlayer else { return }
+        let size = audioLayout == .art ? NSSize(width: 420, height: 420) : NSSize(width: 520, height: 132)
+        window.contentResizeIncrements = NSSize(width: 1, height: 1)  // drop the video aspect lock
+        if audioLayout == .art { window.contentAspectRatio = NSSize(width: 1, height: 1) }
+        window.minSize = audioLayout == .art ? NSSize(width: 300, height: 300) : NSSize(width: 420, height: 132)
+        sizedForCurrentFile = true
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        frame.origin = NSPoint(x: window.frame.midX - frame.width / 2, y: window.frame.midY - frame.height / 2)
+        window.setFrame(frame, display: true, animate: true)
+        poke()
+    }
+
+    // MARK: - Float on top, mini player
+
+    @objc func toggleFloatOnTop() {
+        floatsOnTop.toggle()
+        applyWindowLevel()
+        player.run("show-text", floatsOnTop ? "Float on top: on" : "Float on top: off")
+    }
+
+    private func applyWindowLevel() {
+        window.level = floatsOnTop || isMiniPlayer ? .floating : .normal
+    }
+
+    /// A small always-on-top window in the screen corner that follows you across Spaces.
+    @objc func toggleMiniPlayer() {
+        if window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil); return }
+        guard let screen = window.screen ?? NSScreen.main else { return }
+        if let restore = miniPlayerFrame {
+            miniPlayerFrame = nil
+            window.collectionBehavior = [.fullScreenPrimary]
+            applyWindowLevel()
+            window.setFrame(restore, display: true, animate: true)
+            return
+        }
+        miniPlayerFrame = window.frame
+        let content = window.contentRect(forFrameRect: window.frame).size
+        let width: CGFloat = audioLayout == .compact ? 420 : 400
+        let size = NSSize(width: width, height: audioLayout == .compact ? 132 : width * content.height / content.width)
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        let area = screen.visibleFrame
+        frame.origin = NSPoint(x: area.maxX - frame.width - 20, y: area.minY + 20)
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        applyWindowLevel()
+        window.setFrame(frame, display: true, animate: true)
+    }
+
     // MARK: - Overlay auto-hide
 
     /// Show the controls and restart the 2-second hide timer.
@@ -255,7 +346,9 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         hideTimer?.invalidate()
         hideTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: false) { [weak self] _ in
             guard let self else { return }
-            if self.overlay.pointerInsideControls { self.poke() } else { self.setOverlay(visible: false) }
+            // Compact audio windows have nothing behind the controls, so they stay.
+            if self.overlay.pointerInsideControls || self.audioLayout == .compact { self.poke() }
+            else { self.setOverlay(visible: false) }
         }
     }
 
@@ -286,7 +379,9 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         case 125: player.run("osd-msg-bar", "add", "volume", "-5")               // ↓
         case 53:                                                                 // esc
             if window.styleMask.contains(.fullScreen) { window.toggleFullScreen(nil) }
+            else if isMiniPlayer { toggleMiniPlayer() }
         case 51: player.run("osd-msg", "set", "speed", "1")                      // backspace
+        case 115: player.run("seek", "0", "absolute"); poke()                    // home: start over
         default:
             switch e.charactersIgnoringModifiers?.lowercased() {
             case "f": window.toggleFullScreen(nil)
@@ -298,6 +393,8 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
             case "i": player.run("script-binding", "stats/display-stats-toggle")
             case ".": player.run("frame-step")
             case ",": player.run("frame-back-step")
+            case "t": toggleFloatOnTop()
+            case "p": toggleMiniPlayer()
             case "q": NSApp.terminate(nil)
             default: return false
             }
@@ -309,6 +406,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
 
     /// Size the window to the video's display size, capped at 85% of the screen, aspect locked.
     private func fitWindowToVideo() {
+        if audioLayout != .none { layOutForAudio(); return }
         guard let w = player.int("dwidth"), let h = player.int("dheight"), w > 0, h > 0,
               let screen = window.screen ?? NSScreen.main else { return }
         sizedForCurrentFile = true
@@ -336,9 +434,16 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
             fputs("visible=\(self.window.occlusionState.contains(.visible)) ", stderr)
             let keys = ["time-pos", "hwdec-current", "estimated-vf-fps", "frame-drop-count",
                         "decoder-frame-drop-count", "cache-buffering-state", "demuxer-cache-duration",
-                        "audio-params/channel-count"]
+                        "audio-params/channel-count", "volume", "mute"]
             fputs(keys.map { "\($0)=\(p.string($0) ?? "-")" }.joined(separator: " ") + "\n", stderr)
         }
+    }
+
+    /// Tick marks for the View menu toggles.
+    @objc func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        if item.action == #selector(toggleFloatOnTop) { item.state = floatsOnTop ? .on : .off }
+        if item.action == #selector(toggleMiniPlayer) { item.state = isMiniPlayer ? .on : .off }
+        return true
     }
 
     func windowWillClose(_ notification: Notification) {

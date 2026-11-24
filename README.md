@@ -2,7 +2,7 @@
 
 Ultra-fast, ultra-light media player for macOS. Plays everything FFmpeg plays (MKV, MP4, MOV, AVI, WebM, TS, FLAC, MP3, ALAC, DSD, …) with hardware decoding, and handles 20–30 GB Blu-ray remuxes with TrueHD / DTS-HD audio smoothly.
 
-> **Status:** early development (Phase 4 of 6). Native window, hardware decoding, auto-hiding controls, keymap, audio/subtitle track menus and external subtitles. Resume, PiP and config land in Phase 5. See [SPEC.md](SPEC.md).
+> **Status:** early development (Phase 5 of 6). Feature-complete for v1: playback, controls, tracks, resume, mini player, audio mode and config. Packaging and Homebrew land in Phase 6. See [SPEC.md](SPEC.md).
 
 ## Install
 
@@ -46,11 +46,27 @@ vela --version
 | `A` / `S` | Next audio / subtitle track |
 | `[` `]` / `Backspace` | Slower / faster / normal speed |
 | `,` `.` | Frame back / forward |
+| `Home` | Start over |
 | `F`, double-click | Fullscreen (`Esc` leaves) |
+| `T` | Float on top |
+| `P` | Mini player (small, corner, all Spaces) |
 | `I` | Stats overlay |
 | `Q` | Quit |
 
 Controls appear when you move the mouse and fade out after 2 s. Pick audio and subtitle tracks from the menu bar or the buttons in the control bar. Drop an `.srt`/`.ass`/`.vtt` file on the window to add it; subtitles next to the movie (or in a `Subs/` folder) load automatically.
+
+vela remembers where you stopped and resumes there next time (unless you were in the first 30 s or the last minute). Audio files open in a compact window, or a square one when they have cover art.
+
+### Config
+
+Put defaults in `~/.config/vela/config`, one mpv option per line. Command-line options win.
+
+```
+# ~/.config/vela/config
+volume=70
+sub-font-size=40
+alang=en,hi
+```
 
 ```bash
 VELA_DEBUG=1 vela movie.mkv         # print hwdec / dropped frames / cache every 5 s

@@ -31,16 +31,26 @@ final class Player {
         set("input-default-bindings", "no")
         if headless {
             set("vo", "null")
+            set("resume-playback", "no")
         } else {
             set("vo", "libmpv")      // frames come to us through the render API
             set("keep-open", "yes")  // stay on the last frame at end of file
             set("idle", "yes")       // window may open with no file
+            // Resume where you left off. Only position and track choice are remembered.
+            set("watch-later-dir", Self.supportDirectory.appendingPathComponent("watch_later").path)
+            set("watch-later-options", "start,aid,sid,sub-visibility")
         }
         for (k, v) in options { set(k, v) }
         try check(mpv_initialize(handle), "mpv_initialize")
     }
 
     deinit { mpv_terminate_destroy(handle) }
+
+    /// ~/Library/Application Support/vela
+    static var supportDirectory: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("vela", isDirectory: true)
+    }
 
     // MARK: - Options, properties, commands
 
@@ -70,6 +80,11 @@ final class Player {
         guard let p = mpv_get_property_string(handle, name) else { return nil }
         defer { mpv_free(p) }
         return String(cString: p)
+    }
+
+    func double(_ name: String) -> Double? {
+        var v: Double = 0
+        return mpv_get_property(handle, name, MPV_FORMAT_DOUBLE, &v) >= 0 ? v : nil
     }
 
     func int(_ name: String) -> Int64? {

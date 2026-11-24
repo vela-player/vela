@@ -17,12 +17,34 @@ func usage() -> Never {
            vela --version
 
     Any --key=value is passed to mpv, e.g. --start=3600 --mute=yes --volume=50
+    Defaults can live in ~/.config/vela/config, one key=value per line.
     """)
     exit(0)
 }
 
+/// ~/.config/vela/config (or $XDG_CONFIG_HOME/vela/config): one mpv option per line.
+///     # comment
+///     volume=70
+///     --sub-font-size=40      (leading dashes optional)
+func loadConfig() -> [(String, String)] {
+    let env = ProcessInfo.processInfo.environment
+    let base = env["XDG_CONFIG_HOME"].map { URL(fileURLWithPath: $0) }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config")
+    let url = base.appendingPathComponent("vela/config")
+    guard let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
+    return text.split(whereSeparator: \.isNewline).compactMap { raw in
+        var line = raw.trimmingCharacters(in: .whitespaces)
+        if line.isEmpty || line.hasPrefix("#") { return nil }
+        while line.hasPrefix("-") { line.removeFirst() }
+        guard let eq = line.firstIndex(of: "=") else { return (line, "yes") }
+        return (line[..<eq].trimmingCharacters(in: .whitespaces),
+                line[line.index(after: eq)...].trimmingCharacters(in: .whitespaces))
+    }
+}
+
 // Split arguments into vela flags, mpv passthrough options and the file.
-var mpvOptions: [(String, String)] = []
+// Config file first, so command-line options win.
+var mpvOptions: [(String, String)] = loadConfig()
 var positional: [String] = []
 var mode = "play"
 for arg in CommandLine.arguments.dropFirst() {
@@ -75,6 +97,15 @@ do {
         let delegate = AppDelegate(file: positional.first.map(fileURL), mpvOptions: mpvOptions)
         app.delegate = delegate
         app.setActivationPolicy(.regular)  // dock icon + menu bar even as a bare CLI binary
+        // Ctrl-C / kill in the terminal: quit normally so the resume position is saved.
+        var signalSources: [DispatchSourceSignal] = []
+        for sig in [SIGINT, SIGTERM] {
+            signal(sig, SIG_IGN)
+            let src = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            src.setEventHandler { NSApp.terminate(nil) }
+            src.resume()
+            signalSources.append(src)
+        }
         app.run()
     }
 } catch {

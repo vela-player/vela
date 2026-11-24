@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminateAfterLastWindowClosed(_ app: NSApplication) -> Bool { true }
 
     func applicationWillTerminate(_ note: Notification) {
+        controller?.saveResumePosition()
         controller?.videoView.videoLayer.shutdown()  // render context before the mpv core
         controller = nil
     }
@@ -68,6 +69,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let viewMenu = NSMenu(title: "View")
         let fs = viewMenu.addItem(withTitle: "Toggle Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
         fs.keyEquivalentModifierMask = [.command, .control]
+        viewMenu.addItem(.separator())
+        let top = viewMenu.addItem(withTitle: "Float on Top", action: #selector(PlayerWindowController.toggleFloatOnTop), keyEquivalent: "t")
+        top.target = controller
+        let mini = viewMenu.addItem(withTitle: "Mini Player", action: #selector(PlayerWindowController.toggleMiniPlayer), keyEquivalent: "p")
+        mini.keyEquivalentModifierMask = [.command, .shift]
+        mini.target = controller
         viewItem.submenu = viewMenu
         main.addItem(viewItem)
 

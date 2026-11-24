@@ -39,7 +39,7 @@ Library and playlists, streaming URLs, filters, skins, Windows and Linux, our ow
 - Overlay: seek bar with hover time, play/pause, volume, elapsed/remaining time, title.
 - Track picker: audio (e.g. "TrueHD Atmos 7.1"), subtitles, load external .srt.
 - Open via drag and drop, CLI argument, file associations, or resume from the last position.
-- Fullscreen, Picture-in-Picture, always-on-top.
+- Fullscreen, mini player (small floating corner window on all Spaces; system PiP would need AVKit sample-buffer rendering, so it's deferred), always-on-top.
 - Audio-only mode: compact window with artwork.
 - Stats overlay (`I`): codec, bitrate, hwdec status, dropped frames, cache fill.
 - Config: `~/.config/vela/config` (key=value, passed through to mpv).

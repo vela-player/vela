@@ -31,6 +31,7 @@ final class Player {
         // those languages turn on only when the audio is in another language.
         let langs = Self.preferredLanguages
         if !langs.isEmpty { set("alang", langs); set("slang", langs) }
+        set("subs-with-matching-audio", "no")   // English audio: no English subs unless forced
         set("terminal", "no")
         set("input-default-bindings", "no")
         if headless {

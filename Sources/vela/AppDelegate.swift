@@ -94,6 +94,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let mini = viewMenu.addItem(withTitle: "Mini Player", action: #selector(PlayerWindowController.toggleMiniPlayer), keyEquivalent: "p")
         mini.keyEquivalentModifierMask = [.command, .shift]
         mini.target = controller
+        let stats = viewMenu.addItem(withTitle: "Show Stats", action: #selector(PlayerWindowController.toggleStats), keyEquivalent: "i")
+        stats.target = controller
         viewItem.submenu = viewMenu
         main.addItem(viewItem)
 

@@ -73,6 +73,8 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     let window: NSWindow
     let videoView: VideoView
     private let overlay = OverlayView()
+    private let statsPanel = StatsPanel()
+    private var statsTimer: Timer?
     private var state = PlaybackState()
     private var sizedForCurrentFile = false
     private var overlayVisible = true
@@ -118,6 +120,14 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
                 v.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             ])
         }
+        statsPanel.translatesAutoresizingMaskIntoConstraints = false
+        statsPanel.isHidden = true
+        container.addSubview(statsPanel)
+        NSLayoutConstraint.activate([
+            statsPanel.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
+            statsPanel.topAnchor.constraint(equalTo: container.topAnchor, constant: 36),
+            statsPanel.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor, constant: -76),
+        ])
         window.contentView = container
 
         videoView.onOpen = { [weak self] url in
@@ -434,7 +444,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
             case "s": player.run("osd-msg", "cycle", "sub")
             case "[": player.run("osd-msg", "multiply", "speed", "1/1.1")
             case "]": player.run("osd-msg", "multiply", "speed", "1.1")
-            case "i": player.run("script-binding", "stats/display-stats-toggle")
+            case "i": toggleStats()
             case ".": player.run("frame-step")
             case ",": player.run("frame-back-step")
             case "t": toggleFloatOnTop()
@@ -444,6 +454,24 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
             }
         }
         return true
+    }
+
+    // MARK: - Stats panel
+
+    @objc func toggleStats() {
+        if statsPanel.isHidden {
+            refreshStats()
+            statsPanel.isHidden = false
+            statsTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.refreshStats() }
+        } else {
+            statsPanel.isHidden = true
+            statsTimer?.invalidate()
+            statsTimer = nil
+        }
+    }
+
+    private func refreshStats() {
+        statsPanel.show(player.statsSections(window: window))
     }
 
     // MARK: - Window sizing
@@ -480,6 +508,12 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
                         "decoder-frame-drop-count", "cache-buffering-state", "demuxer-cache-duration",
                         "audio-params/channel-count", "volume", "mute", "current-tracks/audio/lang"]
             fputs(keys.map { "\($0)=\(p.string($0) ?? "-")" }.joined(separator: " ") + "\n", stderr)
+            if ProcessInfo.processInfo.environment["VELA_DEBUG"] == "stats" {
+                for (title, rows) in p.statsSections(window: self.window) {
+                    fputs("  \(title.uppercased())\n", stderr)
+                    for (l, v) in rows { if let v, !v.isEmpty { fputs("    \(l.padding(toLength: 12, withPad: " ", startingAt: 0)) \(v)\n", stderr) } }
+                }
+            }
         }
     }
 

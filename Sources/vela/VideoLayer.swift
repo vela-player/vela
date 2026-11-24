@@ -35,6 +35,10 @@ final class VideoLayer: CAOpenGLLayer {
         if let pf = Self.makePixelFormat(deep: true) {
             pixelFormat = pf
             framebufferFormat = Int32(GL_RGBA16F)
+            // Core Animation treats float surfaces as linear light unless told otherwise, which
+            // brightens mpv's gamma-encoded output (washed-out shadows). Declare what mpv writes:
+            // BT.709 primaries with a display gamma, i.e. sRGB — same as an 8-bit surface.
+            colorspace = CGColorSpace(name: CGColorSpace.sRGB)
         } else {
             pixelFormat = Self.makePixelFormat(deep: false)
         }

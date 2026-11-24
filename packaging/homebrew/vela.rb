@@ -1,12 +1,12 @@
 # Homebrew formula for vela. The release workflow copies this into the
-# technitish9123/homebrew-tap repository with the version and sha256 filled in.
+# vela-player/homebrew-tap repository with the version and sha256 filled in.
 class Vela < Formula
   desc "Ultra-fast, ultra-light media player for macOS"
-  homepage "https://github.com/technitish9123/vela"
-  url "https://github.com/technitish9123/vela/archive/refs/tags/v@VERSION@.tar.gz"
+  homepage "https://github.com/vela-player/vela"
+  url "https://github.com/vela-player/vela/archive/refs/tags/v@VERSION@.tar.gz"
   sha256 "@SHA256@"
   license "GPL-3.0-or-later"
-  head "https://github.com/technitish9123/vela.git", branch: "main"
+  head "https://github.com/vela-player/vela.git", branch: "main"
 
   depends_on macos: :ventura
   depends_on "mpv"

@@ -130,10 +130,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         overlay.onTogglePause = { [weak self] in self?.player.run("cycle", "pause") }
         overlay.onToggleMute = { [weak self] in self?.player.run("cycle", "mute") }
         overlay.onVolume = { [weak self] v in self?.player.setProperty("volume", String(format: "%.0f", v)) }
-        overlay.seekBar.onSeek = { [weak self] t, done in
-            self?.player.run("seek", String(t), done ? "absolute+exact" : "absolute+keyframes")
-            self?.poke()
-        }
+        overlay.seekBar.onSeek = { [weak self] t, done in self?.requestSeek(t, final: done) }
 
         for (name, format) in [("time-pos", MPV_FORMAT_DOUBLE), ("duration", MPV_FORMAT_DOUBLE),
                                ("demuxer-cache-time", MPV_FORMAT_DOUBLE), ("pause", MPV_FORMAT_FLAG),
@@ -177,6 +174,8 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
             fileLoaded = true
             fileDidLoad()
             if ProcessInfo.processInfo.environment["VELA_DEBUG"] != nil, debugTimer == nil { startDebugStats() }
+        case MPV_EVENT_PLAYBACK_RESTART:
+            seekLanded()
         case MPV_EVENT_SHUTDOWN:
             NSApp.terminate(nil)
         default:
@@ -191,6 +190,8 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         let flag = p.format == MPV_FORMAT_FLAG ? p.data.load(as: Int32.self) != 0 : false
         switch name {
         case "time-pos":
+            // While scrubbing, the controls follow the pointer, not the decoder.
+            if scrubTarget != nil { return }
             // time-pos fires every frame; the controls only change once per second.
             let secondChanged = Int(double) != Int(state.position)
             state.position = double
@@ -203,6 +204,49 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         default: return
         }
         if overlayVisible { overlay.update(state) }  // no UI work while hidden
+    }
+
+    // MARK: - Scrubbing
+
+    // Dragging the seek bar produces 60-120 positions a second. Sending each as a seek makes
+    // mpv flush and restart decoding constantly, which stutters. Instead: one seek in flight,
+    // and when it lands we jump straight to the latest pointer position (older ones are skipped).
+    private var seekInFlight = false
+    private var pendingSeek: (time: Double, final: Bool)?
+    private var scrubbing = false
+    private var scrubTarget: Double?   // shown instead of time-pos until the last seek lands
+    private var seekWatchdog: Timer?
+
+    private func requestSeek(_ t: Double, final: Bool) {
+        scrubbing = !final
+        scrubTarget = t
+        state.position = t
+        overlay.update(state)
+        poke()
+        if seekInFlight { pendingSeek = (t, final) } else { sendSeek(t, final: final) }
+    }
+
+    private func sendSeek(_ t: Double, final: Bool) {
+        seekInFlight = true
+        // Keyframe seeks are instant while dragging; the release lands on the exact frame.
+        if (try? player.command(["seek", String(t), final ? "absolute+exact" : "absolute+keyframes"])) == nil {
+            seekLanded()
+            return
+        }
+        // If mpv never reports the seek finished (e.g. end of file), don't stay stuck.
+        seekWatchdog?.invalidate()
+        seekWatchdog = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: false) { [weak self] _ in self?.seekLanded() }
+    }
+
+    private func seekLanded() {
+        seekWatchdog?.invalidate()
+        seekInFlight = false
+        if let next = pendingSeek {
+            pendingSeek = nil
+            sendSeek(next.time, final: next.final)
+        } else if !scrubbing {
+            scrubTarget = nil  // hand the controls back to the real playback position
+        }
     }
 
     // MARK: - Tracks
@@ -434,7 +478,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
             fputs("visible=\(self.window.occlusionState.contains(.visible)) ", stderr)
             let keys = ["time-pos", "hwdec-current", "estimated-vf-fps", "frame-drop-count",
                         "decoder-frame-drop-count", "cache-buffering-state", "demuxer-cache-duration",
-                        "audio-params/channel-count", "volume", "mute"]
+                        "audio-params/channel-count", "volume", "mute", "current-tracks/audio/lang"]
             fputs(keys.map { "\($0)=\(p.string($0) ?? "-")" }.joined(separator: " ") + "\n", stderr)
         }
     }

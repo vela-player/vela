@@ -27,6 +27,10 @@ final class Player {
         set("audio-channels", "auto-safe")       // follow the output device layout
         set("sub-auto", "fuzzy")                 // load movie.en.srt etc. next to the file
         set("sub-file-paths", "subs:Subs:subtitles:Subtitles")
+        // Prefer audio in the Mac's languages (System Settings > Language & Region). Subtitles in
+        // those languages turn on only when the audio is in another language.
+        let langs = Self.preferredLanguages
+        if !langs.isEmpty { set("alang", langs); set("slang", langs) }
         set("terminal", "no")
         set("input-default-bindings", "no")
         if headless {
@@ -45,6 +49,15 @@ final class Player {
     }
 
     deinit { mpv_terminate_destroy(handle) }
+
+    /// e.g. "en,hi" from the macOS language list.
+    static var preferredLanguages: String {
+        var seen: [String] = []
+        for id in Locale.preferredLanguages {
+            if let code = Locale(identifier: id).language.languageCode?.identifier, !seen.contains(code) { seen.append(code) }
+        }
+        return seen.joined(separator: ",")
+    }
 
     /// ~/Library/Application Support/vela
     static var supportDirectory: URL {

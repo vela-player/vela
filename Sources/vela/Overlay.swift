@@ -273,9 +273,9 @@ final class OverlayView: NSView {
         hoverPill.isHidden = false
     }
 
-    /// Hide the audio button when there is nothing to choose between.
+    /// Hide the audio button only when the file has no audio at all.
     func setTrackButtons(audio: Int, subtitles: Int) {
-        audioButton.isHidden = audio < 2
+        audioButton.isHidden = audio == 0  // shown even for one track, so it's easy to find
         subtitleButton.isHidden = false  // always offers "Add Subtitle File…"
     }
 

@@ -53,7 +53,7 @@ vela --version
 | `I` | Stats overlay |
 | `Q` | Quit |
 
-Controls appear when you move the mouse and fade out after 2 s. Pick audio and subtitle tracks from the menu bar or the buttons in the control bar. Drop an `.srt`/`.ass`/`.vtt` file on the window to add it; subtitles next to the movie (or in a `Subs/` folder) load automatically.
+Controls appear when you move the mouse and fade out after 2 s. Switch audio language (English, Chinese, commentary…) with the **waveform button** in the control bar, the **Audio** menu, or `A` to step through tracks; subtitles work the same with the speech-bubble button, **Subtitles** menu or `S`. vela picks audio in your Mac's language automatically (System Settings → Language & Region) and turns on subtitles in your language when the audio isn't; override with `alang=`/`slang=` in the config. Drop an `.srt`/`.ass`/`.vtt` file on the window to add it; subtitles next to the movie (or in a `Subs/` folder) load automatically.
 
 vela remembers where you stopped and resumes there next time (unless you were in the first 30 s or the last minute). Audio files open in a compact window, or a square one when they have cover art.
 

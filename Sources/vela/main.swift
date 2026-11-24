@@ -2,52 +2,78 @@
 // Copyright (C) 2026 vela contributors
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AppKit
 import CMpv
 import Foundation
 
-let version = "0.1.0"
-let args = Array(CommandLine.arguments.dropFirst())
+let version = "0.2.0"
 
 func usage() -> Never {
     print("""
     vela \(version) — ultra-light media player
-    usage: vela <file>            play (window arrives in Phase 2)
+
+    usage: vela [--mpv-option=value ...] [file]
            vela --probe <file>    print media info and exit
            vela --version
+
+    Any --key=value is passed to mpv, e.g. --start=3600 --mute=yes --volume=50
     """)
     exit(0)
 }
 
-guard let first = args.first else { usage() }
+// Split arguments into vela flags, mpv passthrough options and the file.
+var mpvOptions: [(String, String)] = []
+var positional: [String] = []
+var mode = "play"
+for arg in CommandLine.arguments.dropFirst() {
+    switch arg {
+    case "-h", "--help": usage()
+    case "-v", "--version": mode = "version"
+    case "--probe": mode = "probe"
+    case _ where arg.hasPrefix("--"):
+        let body = arg.dropFirst(2)
+        if let eq = body.firstIndex(of: "=") {
+            mpvOptions.append((String(body[..<eq]), String(body[body.index(after: eq)...])))
+        } else {
+            mpvOptions.append((String(body), "yes"))
+        }
+    default: positional.append(arg)
+    }
+}
+
+func fileURL(_ path: String) -> URL {
+    URL(fileURLWithPath: (path as NSString).expandingTildeInPath).standardizedFileURL
+}
 
 do {
-    switch first {
-    case "--version", "-v":
+    switch mode {
+    case "version":
         let api = mpv_client_api_version()
         print("vela \(version) (libmpv client API \(api >> 16).\(api & 0xffff))")
-    case "--probe":
-        guard args.count > 1 else { usage() }
-        let p = try Player(headless: true)
-        p.set("pause", "yes")
-        p.set("ao", "null")
-        try p.command(["loadfile", args[1]])
+
+    case "probe":
+        guard let path = positional.first else { usage() }
+        let p = try Player(headless: true, options: [("pause", "yes"), ("ao", "null")])
+        try p.command(["loadfile", fileURL(path).path])
         guard p.wait(for: [MPV_EVENT_FILE_LOADED, MPV_EVENT_END_FILE]) == MPV_EVENT_FILE_LOADED else {
-            fputs("vela: could not open \(args[1])\n", stderr); exit(1)
+            fputs("vela: could not open \(path)\n", stderr); exit(1)
         }
         for (label, prop) in [("format", "file-format"), ("duration", "duration"),
-                              ("video", "video-codec"), ("size", "video-params/w"),
-                              ("audio", "audio-codec"), ("channels", "audio-params/channel-count"),
-                              ("rate", "audio-params/samplerate"), ("hwdec", "hwdec")] {
+                              ("video", "video-codec"), ("width", "width"), ("height", "height"),
+                              ("audio", "audio-codec"), ("channels", "track-list/1/demux-channel-count"),
+                              ("rate", "track-list/1/demux-samplerate"), ("tracks", "track-list/count")] {
             print(label.padding(toLength: 9, withPad: " ", startingAt: 0), p.string(prop) ?? "-")
         }
-    case "-h", "--help":
-        usage()
+
     default:
-        // Phase 1: audio-only headless playback to prove the pipeline end to end.
-        let p = try Player(headless: true)
-        try p.command(["loadfile", first])
-        print("playing \(first) (headless, Ctrl-C to stop)")
-        p.wait(for: [MPV_EVENT_END_FILE], timeout: .infinity)
+        if let path = positional.first, !FileManager.default.fileExists(atPath: fileURL(path).path) {
+            fputs("vela: no such file: \(path)\n", stderr); exit(1)
+        }
+        let app = NSApplication.shared
+        let delegate = AppDelegate(file: positional.first.map(fileURL), mpvOptions: mpvOptions)
+        app.delegate = delegate
+        app.setActivationPolicy(.regular)  // dock icon + menu bar even as a bare CLI binary
+        app.run()
     }
 } catch {
     fputs("vela: \(error)\n", stderr)

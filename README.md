@@ -2,7 +2,7 @@
 
 Ultra-fast, ultra-light media player for macOS. Plays everything FFmpeg plays (MKV, MP4, MOV, AVI, WebM, TS, FLAC, MP3, ALAC, DSD, …) with hardware decoding, and handles 20–30 GB Blu-ray remuxes with TrueHD / DTS-HD audio smoothly.
 
-> **Status:** early development (Phase 1 of 6). Command-line probing and audio playback work; the video window lands in Phase 2. See [SPEC.md](SPEC.md).
+> **Status:** early development (Phase 2 of 6). Plays video in a native window with hardware decoding. On-screen controls land in Phase 3. See [SPEC.md](SPEC.md).
 
 ## Install
 
@@ -29,9 +29,16 @@ swift build -c release
 ## Usage
 
 ```bash
-vela movie.mkv           # play
-vela --probe movie.mkv   # print codec, resolution, audio info
+vela movie.mkv                      # play (or drag a file onto the window, or ⌘O)
+vela --start=3600 --volume=50 a.mkv  # any --key=value is passed to mpv
+vela --probe movie.mkv              # print codec, resolution, audio info
 vela --version
+```
+
+Keys so far: `Space` pause, `←/→` seek 5 s, `F` or double-click fullscreen, `Esc` leave fullscreen, `Q` quit.
+
+```bash
+VELA_DEBUG=1 vela movie.mkv         # print hwdec / dropped frames / cache every 5 s
 ```
 
 ## Why it's fast

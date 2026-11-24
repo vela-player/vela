@@ -12,7 +12,7 @@ let package = Package(
             name: "vela",
             dependencies: ["CMpv"],
             cSettings: [.unsafeFlags(["-I\(brew)/include"])],
-            swiftSettings: [.unsafeFlags(["-Xcc", "-I\(brew)/include"])],
+            swiftSettings: [.unsafeFlags(["-Xcc", "-I\(brew)/include", "-Xcc", "-DGL_SILENCE_DEPRECATION"])],
             linkerSettings: [.unsafeFlags(["-L\(brew)/lib", "-Xlinker", "-rpath", "-Xlinker", "\(brew)/lib"])]
         ),
     ]

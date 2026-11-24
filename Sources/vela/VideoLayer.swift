@@ -15,6 +15,9 @@ final class VideoLayer: CAOpenGLLayer {
     private var renderContext: OpaquePointer?
     private var glContext: CGLContextObj?
     private var pixelFormat: CGLPixelFormatObj?
+    /// GL_RGBA16F when we got a half-float framebuffer, 0 (unknown, mpv assumes 8-bit) otherwise.
+    private var framebufferFormat: Int32 = 0
+    private var loggedFramebuffer = false
 
     init(player: Player) {
         self.player = player
@@ -27,7 +30,14 @@ final class VideoLayer: CAOpenGLLayer {
         autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
         // mpv needs the render context before a file loads, or it disables video.
         // So we own the GL context and create it now instead of on first draw.
-        pixelFormat = Self.makePixelFormat()
+        // Prefer a 16-bit float framebuffer so 10-bit video reaches the screen without banding
+        // (mpv's own window uses a 10-bit surface for the same reason). Fall back to 8-bit.
+        if let pf = Self.makePixelFormat(deep: true) {
+            pixelFormat = pf
+            framebufferFormat = Int32(GL_RGBA16F)
+        } else {
+            pixelFormat = Self.makePixelFormat(deep: false)
+        }
         if let pf = pixelFormat {
             CGLCreateContext(pf, nil, &glContext)
             if let gl = glContext {
@@ -46,14 +56,15 @@ final class VideoLayer: CAOpenGLLayer {
 
     // MARK: - GL setup
 
-    private static func makePixelFormat() -> CGLPixelFormatObj? {
-        let attrs: [CGLPixelFormatAttribute] = [
+    private static func makePixelFormat(deep: Bool) -> CGLPixelFormatObj? {
+        var attrs: [CGLPixelFormatAttribute] = [
             kCGLPFAOpenGLProfile, CGLPixelFormatAttribute(UInt32(kCGLOGLPVersion_3_2_Core.rawValue)),
             kCGLPFAAccelerated,
             kCGLPFADoubleBuffer,
             kCGLPFAAllowOfflineRenderers,
-            CGLPixelFormatAttribute(0),
         ]
+        if deep { attrs += [kCGLPFAColorSize, CGLPixelFormatAttribute(64), kCGLPFAColorFloat] }
+        attrs.append(CGLPixelFormatAttribute(0))
         var pf: CGLPixelFormatObj?
         var count: GLint = 0
         CGLChoosePixelFormat(attrs, &pf, &count)
@@ -113,7 +124,16 @@ final class VideoLayer: CAOpenGLLayer {
         var viewport = [GLint](repeating: 0, count: 4)
         glGetIntegerv(GLenum(GL_VIEWPORT), &viewport)
 
-        var fbo = mpv_opengl_fbo(fbo: fboID, w: viewport[2], h: viewport[3], internal_format: 0)
+        // Telling mpv the real depth lets it dither for 16-bit output instead of 8-bit.
+        var fbo = mpv_opengl_fbo(fbo: fboID, w: viewport[2], h: viewport[3], internal_format: framebufferFormat)
+        if !loggedFramebuffer, ProcessInfo.processInfo.environment["VELA_DEBUG"] != nil {
+            loggedFramebuffer = true
+            var bits: GLint = 0, type: GLint = 0
+            let attachment = GLenum(fboID == 0 ? GL_BACK_LEFT : GL_COLOR_ATTACHMENT0)
+            glGetFramebufferAttachmentParameteriv(GLenum(GL_DRAW_FRAMEBUFFER), attachment, GLenum(GL_FRAMEBUFFER_ATTACHMENT_RED_SIZE), &bits)
+            glGetFramebufferAttachmentParameteriv(GLenum(GL_DRAW_FRAMEBUFFER), attachment, GLenum(GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE), &type)
+            fputs("framebuffer: fbo=\(fboID) red_bits=\(bits) float=\(type == GL_FLOAT) told_mpv=\(framebufferFormat == Int32(GL_RGBA16F) ? "RGBA16F" : "unknown")\n", stderr)
+        }
         var flipY: Int32 = 1
         withUnsafeMutablePointer(to: &fbo) { fp in
             withUnsafeMutablePointer(to: &flipY) { yp in

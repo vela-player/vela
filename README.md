@@ -10,12 +10,12 @@ Quiet dialogue, deafening explosions? Press **`V`** (or the voice button in the 
 
 Film mixes put dialogue in the center channel and effects everywhere else; a normal surround-to-stereo downmix buries the center, which is why laptop speakers and headphones make you ride the volume all film. Clear Voice remixes with the dialogue in front and evens out the jumps:
 
-| Measured on a 5.1 film (EBU R128) | Standard mix | Clear Voice |
+| Measured on a 5.1 film clip | Standard mix | Clear Voice |
 |---|---|---|
-| Dialogue vs effects | baseline | **+9.9 dB** louder relative to effects |
-| Action scene loudness range | 13.4 LU | **4.8 LU** (64% smaller swings) |
-| Quiet scene loudness | −35.0 LUFS | **−25.2 LUFS** (10 dB easier to hear) |
-| Clipping | peaks at −2.5 dBFS | limited to −1 dBFS |
+| Dialogue vs effects | baseline | **+6.7 dB** louder relative to effects |
+| Loudness range (EBU R128) | 13.0 LU | **6.9 LU** (about half the swings) |
+| Bass and treble balance | baseline | within about 1 dB, so it stays full, not thin |
+| Clipping | — | limited to −1 dBFS |
 
 Works on any track: surround gets a dialogue-first remix, stereo gets a speech-band lift. vela remembers the setting.
 

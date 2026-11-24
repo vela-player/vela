@@ -16,10 +16,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        NSApp.mainMenu = makeMenu()
         do {
             let c = PlayerWindowController(player: try Player(options: mpvOptions))
             controller = c
+            NSApp.mainMenu = makeMenu()
             c.show()
             NSApp.activate(ignoringOtherApps: true)
             if let file = initialFile { c.open(file) } else { openDocument(nil) }
@@ -70,6 +70,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fs.keyEquivalentModifierMask = [.command, .control]
         viewItem.submenu = viewMenu
         main.addItem(viewItem)
+
+        // Track menus are owned and kept current by the window controller.
+        for menu in [controller?.audioMenu, controller?.subtitleMenu].compactMap({ $0 }) {
+            let item = NSMenuItem()
+            item.submenu = menu
+            main.addItem(item)
+        }
 
         return main
     }

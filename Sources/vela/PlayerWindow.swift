@@ -4,6 +4,7 @@
 
 import AppKit
 import CMpv
+import UniformTypeIdentifiers
 
 /// The view that hosts the video layer, takes keys and accepts dropped files.
 final class VideoView: NSView {
@@ -76,6 +77,9 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
     private var sizedForCurrentFile = false
     private var overlayVisible = true
     private var hideTimer: Timer?
+    private var debugTimer: Timer?
+    let audioMenu = NSMenu(title: "Audio")
+    let subtitleMenu = NSMenu(title: "Subtitles")
 
     init(player: Player) {
         self.player = player
@@ -107,7 +111,11 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         }
         window.contentView = container
 
-        videoView.onOpen = { [weak self] url in self?.open(url) }
+        videoView.onOpen = { [weak self] url in
+            if subtitleExtensions.contains(url.pathExtension.lowercased()) { self?.addSubtitle(url) } else { self?.open(url) }
+        }
+        overlay.onAudioMenu = { [weak self] view in self?.popUp(self?.audioMenu, from: view) }
+        overlay.onSubtitleMenu = { [weak self] view in self?.popUp(self?.subtitleMenu, from: view) }
         videoView.onKey = { [weak self] e in self?.handleKey(e) ?? false }
         videoView.onMouseMove = { [weak self] in self?.poke() }
         overlay.onTogglePause = { [weak self] in self?.player.run("cycle", "pause") }
@@ -120,11 +128,13 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
 
         for (name, format) in [("time-pos", MPV_FORMAT_DOUBLE), ("duration", MPV_FORMAT_DOUBLE),
                                ("demuxer-cache-time", MPV_FORMAT_DOUBLE), ("pause", MPV_FORMAT_FLAG),
-                               ("volume", MPV_FORMAT_DOUBLE), ("mute", MPV_FORMAT_FLAG)] {
+                               ("volume", MPV_FORMAT_DOUBLE), ("mute", MPV_FORMAT_FLAG),
+                               ("track-list", MPV_FORMAT_NONE)] {
             player.observe(name, format)
         }
         player.onEvent = { [weak self] ev in self?.handle(ev) }
         player.startEventPump()
+        rebuildTrackMenus()
     }
 
     func show() {
@@ -152,7 +162,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         case MPV_EVENT_VIDEO_RECONFIG:
             if !sizedForCurrentFile { fitWindowToVideo() }
         case MPV_EVENT_FILE_LOADED:
-            if ProcessInfo.processInfo.environment["VELA_DEBUG"] != nil { startDebugStats() }
+            if ProcessInfo.processInfo.environment["VELA_DEBUG"] != nil, debugTimer == nil { startDebugStats() }
         case MPV_EVENT_SHUTDOWN:
             NSApp.terminate(nil)
         default:
@@ -162,6 +172,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
 
     private func propertyChanged(_ p: mpv_event_property) {
         let name = String(cString: p.name)
+        if name == "track-list" { rebuildTrackMenus(); return }
         let double = p.format == MPV_FORMAT_DOUBLE ? p.data.load(as: Double.self) : 0
         let flag = p.format == MPV_FORMAT_FLAG ? p.data.load(as: Int32.self) != 0 : false
         switch name {
@@ -178,6 +189,62 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
         default: return
         }
         if overlayVisible { overlay.update(state) }  // no UI work while hidden
+    }
+
+    // MARK: - Tracks
+
+    /// Rebuild the Audio and Subtitles menus (menu bar and overlay buttons share them).
+    private func rebuildTrackMenus() {
+        let tracks = Track.list(from: player.node("track-list"))
+        fill(audioMenu, with: tracks.filter { $0.kind == .audio }, property: "aid")
+        fill(subtitleMenu, with: tracks.filter { $0.kind == .sub }, property: "sid")
+        subtitleMenu.addItem(.separator())
+        let add = subtitleMenu.addItem(withTitle: "Add Subtitle File…", action: #selector(chooseSubtitle), keyEquivalent: "")
+        add.target = self
+        overlay.setTrackButtons(audio: tracks.contains { $0.kind == .audio } ? tracks.filter { $0.kind == .audio }.count : 0,
+                                subtitles: tracks.filter { $0.kind == .sub }.count)
+    }
+
+    private func fill(_ menu: NSMenu, with tracks: [Track], property: String) {
+        menu.removeAllItems()
+        let off = menu.addItem(withTitle: tracks.isEmpty ? "No Tracks" : "Off", action: #selector(selectTrack(_:)), keyEquivalent: "")
+        off.target = self
+        off.representedObject = [property, "no"]
+        off.state = tracks.contains { $0.selected } ? .off : .on
+        if tracks.isEmpty { off.isEnabled = false; off.action = nil; off.state = .off }
+        if !tracks.isEmpty { menu.addItem(.separator()) }
+        for t in tracks {
+            let item = menu.addItem(withTitle: t.label, action: #selector(selectTrack(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = [property, String(t.id)]
+            item.state = t.selected ? .on : .off
+        }
+    }
+
+    @objc private func selectTrack(_ item: NSMenuItem) {
+        guard let pv = item.representedObject as? [String] else { return }
+        player.run("osd-msg", "set", pv[0], pv[1])
+    }
+
+    @objc func chooseSubtitle() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = subtitleExtensions.compactMap { UTType(filenameExtension: $0) }
+        panel.allowsOtherFileTypes = true
+        panel.directoryURL = window.representedURL?.deletingLastPathComponent()
+        panel.beginSheetModal(for: window) { [weak self] r in
+            if r == .OK, let url = panel.url { self?.addSubtitle(url) }
+        }
+    }
+
+    func addSubtitle(_ url: URL) {
+        player.run("osd-msg", "sub-add", url.path, "select")
+    }
+
+    private func popUp(_ menu: NSMenu?, from view: NSView) {
+        guard let menu else { return }
+        hideTimer?.invalidate()
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: view.bounds.maxY + 6), in: view)
+        poke()
     }
 
     // MARK: - Overlay auto-hide
@@ -263,7 +330,7 @@ final class PlayerWindowController: NSObject, NSWindowDelegate {
 
     /// VELA_DEBUG=1: print playback health every 5 s (used for performance testing).
     private func startDebugStats() {
-        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        debugTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             guard let self else { return }
             let p = self.player
             fputs("visible=\(self.window.occlusionState.contains(.visible)) ", stderr)

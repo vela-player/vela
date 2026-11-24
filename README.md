@@ -2,7 +2,7 @@
 
 Ultra-fast, ultra-light media player for macOS. Plays everything FFmpeg plays (MKV, MP4, MOV, AVI, WebM, TS, FLAC, MP3, ALAC, DSD, …) with hardware decoding, and handles 20–30 GB Blu-ray remuxes with TrueHD / DTS-HD audio smoothly.
 
-> **Status:** early development (Phase 3 of 6). Native window, hardware decoding, auto-hiding controls and the full keymap. Track menus land in Phase 4. See [SPEC.md](SPEC.md).
+> **Status:** early development (Phase 4 of 6). Native window, hardware decoding, auto-hiding controls, keymap, audio/subtitle track menus and external subtitles. Resume, PiP and config land in Phase 5. See [SPEC.md](SPEC.md).
 
 ## Install
 
@@ -31,7 +31,7 @@ swift build -c release
 ```bash
 vela movie.mkv                      # play (or drag a file onto the window, or ⌘O)
 vela --start=3600 --volume=50 a.mkv  # any --key=value is passed to mpv
-vela --probe movie.mkv              # print codec, resolution, audio info
+vela --probe movie.mkv              # print format and every audio/subtitle track
 vela --version
 ```
 
@@ -50,7 +50,7 @@ vela --version
 | `I` | Stats overlay |
 | `Q` | Quit |
 
-Controls appear when you move the mouse and fade out after 2 s.
+Controls appear when you move the mouse and fade out after 2 s. Pick audio and subtitle tracks from the menu bar or the buttons in the control bar. Drop an `.srt`/`.ass`/`.vtt` file on the window to add it; subtitles next to the movie (or in a `Subs/` folder) load automatically.
 
 ```bash
 VELA_DEBUG=1 vela movie.mkv         # print hwdec / dropped frames / cache every 5 s
@@ -60,7 +60,7 @@ VELA_DEBUG=1 vela movie.mkv         # print hwdec / dropped frames / cache every
 
 - Hardware video decode through Apple VideoToolbox
 - Audio is the master clock, so high-bitrate audio never glitches
-- Large read-ahead cache (256 MB) so huge files on slow drives don't stutter
+- 128 MB read-ahead cache: about 13 s of headroom even at Blu-ray remux bitrates, without wasting RAM
 - Native Swift/AppKit, no Electron, a small binary
 
 ## License

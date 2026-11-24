@@ -116,6 +116,8 @@ final class OverlayView: NSView {
     private let panel = Panel()
     private let playButton = NSButton()
     private let muteButton = NSButton()
+    private let audioButton = NSButton()
+    private let subtitleButton = NSButton()
     private let volumeSlider = NSSlider(value: 100, minValue: 0, maxValue: 100, target: nil, action: nil)
     private let elapsed = OverlayView.label()
     private let remaining = OverlayView.label()
@@ -126,6 +128,8 @@ final class OverlayView: NSView {
     var onTogglePause: () -> Void = {}
     var onToggleMute: () -> Void = {}
     var onVolume: (Double) -> Void = { _ in }
+    var onAudioMenu: (NSView) -> Void = { _ in }
+    var onSubtitleMenu: (NSView) -> Void = { _ in }
 
     /// True while the pointer is over the control bar; the overlay stays visible then.
     private(set) var pointerInsideControls = false
@@ -166,6 +170,15 @@ final class OverlayView: NSView {
         muteButton.target = self
         muteButton.action = #selector(muteClicked)
 
+        Self.symbolButton(audioButton, "waveform")
+        audioButton.target = self
+        audioButton.action = #selector(audioClicked)
+        audioButton.toolTip = "Audio track"
+        Self.symbolButton(subtitleButton, "captions.bubble.fill")
+        subtitleButton.target = self
+        subtitleButton.action = #selector(subtitleClicked)
+        subtitleButton.toolTip = "Subtitles"
+
         volumeSlider.controlSize = .small
         volumeSlider.target = self
         volumeSlider.action = #selector(volumeChanged)
@@ -175,7 +188,7 @@ final class OverlayView: NSView {
         seekBar.onHover = { [weak self] h in self?.showHover(h) }
         remaining.alignment = .right
 
-        let row = NSStackView(views: [playButton, elapsed, seekBar, remaining, muteButton, volumeSlider])
+        let row = NSStackView(views: [playButton, elapsed, seekBar, remaining, audioButton, subtitleButton, muteButton, volumeSlider])
         row.orientation = .horizontal
         row.spacing = 10
         row.edgeInsets = NSEdgeInsets(top: 0, left: 10, bottom: 0, right: 14)
@@ -260,6 +273,14 @@ final class OverlayView: NSView {
         hoverPill.isHidden = false
     }
 
+    /// Hide the audio button when there is nothing to choose between.
+    func setTrackButtons(audio: Int, subtitles: Int) {
+        audioButton.isHidden = audio < 2
+        subtitleButton.isHidden = false  // always offers "Add Subtitle File…"
+    }
+
+    @objc private func audioClicked() { onAudioMenu(audioButton) }
+    @objc private func subtitleClicked() { onSubtitleMenu(subtitleButton) }
     @objc private func playClicked() { onTogglePause() }
     @objc private func muteClicked() { onToggleMute() }
     @objc private func volumeChanged() { onVolume(volumeSlider.doubleValue) }

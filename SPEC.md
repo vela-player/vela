@@ -29,7 +29,7 @@ Library and playlists, streaming URLs, filters, skins, Windows and Linux, our ow
 - **Subtitles:** srt, ass/ssa, PGS, VobSub, WebVTT, embedded
 
 ## Large files and high-bitrate audio
-- Demuxer cache of 256 MB forward and 64 MB back, never the whole file.
+- Demuxer cache of 128 MB forward and 32 MB back, never the whole file (measured: 485 MB to 340 MB footprint vs 256/64).
 - Audio is the master clock (`video-sync=audio`); video frames drop or repeat, audio never glitches.
 - Audio is decoded in a float pipeline to multichannel output; macOS downmixes. No passthrough in v1 (no AV receiver). Spatial audio for the Atmos bed is a later option.
 - Hardware decode is on by default, with software fallback.

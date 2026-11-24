@@ -59,10 +59,12 @@ do {
             fputs("vela: could not open \(path)\n", stderr); exit(1)
         }
         for (label, prop) in [("format", "file-format"), ("duration", "duration"),
-                              ("video", "video-codec"), ("width", "width"), ("height", "height"),
-                              ("audio", "audio-codec"), ("channels", "track-list/1/demux-channel-count"),
-                              ("rate", "track-list/1/demux-samplerate"), ("tracks", "track-list/count")] {
+                              ("video", "video-codec"), ("width", "width"), ("height", "height")] {
             print(label.padding(toLength: 9, withPad: " ", startingAt: 0), p.string(prop) ?? "-")
+        }
+        for t in Track.list(from: p.node("track-list")) where t.kind != .video {
+            let mark = t.selected ? "*" : " "
+            print("\(t.kind.rawValue.padding(toLength: 5, withPad: " ", startingAt: 0)) \(mark) \(t.id)  \(t.label)")
         }
 
     default:

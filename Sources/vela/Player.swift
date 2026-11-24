@@ -22,9 +22,11 @@ final class Player {
         set("hwdec", "videotoolbox")
         set("video-sync", "audio")
         set("cache", "yes")
-        set("demuxer-max-bytes", "256MiB")
-        set("demuxer-max-back-bytes", "64MiB")
-        set("audio-channels", "auto")
+        set("demuxer-max-bytes", "128MiB")      // ~13 s even at Blu-ray remux bitrates
+        set("demuxer-max-back-bytes", "32MiB")  // instant short rewinds
+        set("audio-channels", "auto-safe")       // follow the output device layout
+        set("sub-auto", "fuzzy")                 // load movie.en.srt etc. next to the file
+        set("sub-file-paths", "subs:Subs:subtitles:Subtitles")
         set("terminal", "no")
         set("input-default-bindings", "no")
         if headless {
@@ -73,6 +75,32 @@ final class Player {
     func int(_ name: String) -> Int64? {
         var v: Int64 = 0
         return mpv_get_property(handle, name, MPV_FORMAT_INT64, &v) >= 0 ? v : nil
+    }
+
+    /// Read a structured property (maps, lists) as plain Swift values.
+    func node(_ name: String) -> Any? {
+        var n = mpv_node()
+        guard mpv_get_property(handle, name, MPV_FORMAT_NODE, &n) >= 0 else { return nil }
+        defer { mpv_free_node_contents(&n) }
+        return Self.convert(n)
+    }
+
+    private static func convert(_ n: mpv_node) -> Any? {
+        switch n.format {
+        case MPV_FORMAT_STRING: return String(cString: n.u.string)
+        case MPV_FORMAT_FLAG: return n.u.flag != 0
+        case MPV_FORMAT_INT64: return n.u.int64
+        case MPV_FORMAT_DOUBLE: return n.u.double_
+        case MPV_FORMAT_NODE_ARRAY:
+            let list = n.u.list.pointee
+            return (0..<Int(list.num)).compactMap { convert(list.values[$0]) }
+        case MPV_FORMAT_NODE_MAP:
+            let list = n.u.list.pointee
+            var map: [String: Any] = [:]
+            for i in 0..<Int(list.num) { map[String(cString: list.keys[i]!)] = convert(list.values[i]) }
+            return map
+        default: return nil
+        }
     }
 
     /// Ask mpv to send MPV_EVENT_PROPERTY_CHANGE whenever `name` changes.

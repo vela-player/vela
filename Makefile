@@ -30,6 +30,7 @@ app: build
 # Smoke test: version, probe a generated 4K HEVC clip (needs ffmpeg).
 test: build
 	$(BIN) --version
+	mkdir -p build
 	ffmpeg -loglevel error -y -f lavfi -i testsrc2=size=1280x720:rate=24 -f lavfi -i sine -t 2 \
 		-c:v libx264 -c:a aac build/smoke.mp4
 	$(BIN) --probe build/smoke.mp4 | grep -q "audio" && echo "probe ok"
